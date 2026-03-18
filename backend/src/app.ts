@@ -4,6 +4,7 @@ import { rateLimit } from "express-rate-limit";
 import { errorHandler } from "./middleware/error.middleware";
 import authRoutes       from "./modules/auth/auth.routes";
 import workOrderRoutes from "./modules/work-orders/work-order.routes";
+import publicRoutes    from "./modules/public/public.routes";
 
 const app = express();
 
@@ -44,6 +45,7 @@ app.get("/health", (_req, res) => {
 // ---------------------------------------------------------------------------
 app.use("/api/v1/auth",        authRoutes);
 app.use("/api/v1/work-orders", workOrderRoutes);
+app.use("/api/v1/public",      publicRoutes);
 
 // ---------------------------------------------------------------------------
 // 404 handler
