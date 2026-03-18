@@ -1,0 +1,14 @@
+# Normalize line endings to LF on commit, checkout as-is
+* text=auto eol=lf
+
+# Force LF for all source files
+*.ts   text eol=lf
+*.tsx  text eol=lf
+*.js   text eol=lf
+*.json text eol=lf
+*.sql  text eol=lf
+*.md   text eol=lf
+*.yml  text eol=lf
+*.css  text eol=lf
+*.html text eol=lf
+*.env.example text eol=lf

@@ -1,0 +1,99 @@
+// Mirrors backend types
+
+export const WORK_ORDER_STATUSES = [
+  "received",
+  "diagnosing",
+  "awaiting_parts",
+  "in_progress",
+  "quality_control",
+  "ready",
+  "delivered",
+  "cancelled",
+] as const;
+
+export type WorkOrderStatus = (typeof WORK_ORDER_STATUSES)[number];
+
+export interface WorkOrderDetail {
+  id: string;
+  tenant_id: string;
+  vehicle_id: string;
+  client_id: string;
+  order_number: string;
+  status: WorkOrderStatus;
+  mileage_in: number | null;
+  mileage_out: number | null;
+  complaint: string;
+  diagnosis: string | null;
+  internal_notes: string | null;
+  assigned_to: string | null;
+  assigned_user_name: string | null;
+  received_by: string | null;
+  received_at: string;
+  estimated_delivery: string | null;
+  delivered_at: string | null;
+  created_at: string;
+  updated_at: string;
+  // Joined fields
+  client_name: string;
+  client_phone: string | null;
+  vehicle_plate: string;
+  vehicle_brand: string;
+  vehicle_model: string;
+}
+
+export interface CreateWorkOrderDTO {
+  vehicle_id: string;
+  client_id: string;
+  complaint: string;
+  mileage_in?: number;
+  estimated_delivery?: string;
+  assigned_to?: string;
+  internal_notes?: string;
+}
+
+export interface TransitionDTO {
+  status: WorkOrderStatus;
+  diagnosis?: string;
+  internal_notes?: string;
+  mileage_out?: number;
+}
+
+// Wizard form state (spans 3 steps)
+export interface NewOrderFormState {
+  // Step 1 — Vehicle
+  license_plate: string;
+  vehicle_id: string | null;
+  brand: string;
+  model: string;
+  year: string;
+  color: string;
+  mileage_in: string;
+  // Step 2 — Client
+  client_id: string | null;
+  client_name: string;
+  client_phone: string;
+  client_email: string;
+  // Step 3 — Problem
+  complaint: string;
+  urgency: "normal" | "urgent" | "critical";
+  assigned_to: string;
+  internal_notes: string;
+}
+
+export const EMPTY_FORM: NewOrderFormState = {
+  license_plate: "",
+  vehicle_id: null,
+  brand: "",
+  model: "",
+  year: "",
+  color: "",
+  mileage_in: "",
+  client_id: null,
+  client_name: "",
+  client_phone: "",
+  client_email: "",
+  complaint: "",
+  urgency: "normal",
+  assigned_to: "",
+  internal_notes: "",
+};

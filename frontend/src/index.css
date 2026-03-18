@@ -1,0 +1,35 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* Prevent text size inflation on iOS */
+  html { -webkit-text-size-adjust: 100%; }
+
+  /* Smooth scrolling */
+  * { scroll-behavior: smooth; }
+
+  /* Custom scrollbar for dark theme */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: #1E293B; }
+  ::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
+}
+
+@layer utilities {
+  /* Safe area padding for iPhone notch / home indicator */
+  .pb-safe { padding-bottom: env(safe-area-inset-bottom, 0); }
+  .pt-safe { padding-top: env(safe-area-inset-top, 0); }
+
+  /* Plate font — monospace-like large display */
+  .font-plate {
+    font-size: 1.875rem;
+    font-weight: 900;
+    letter-spacing: 0.15em;
+    line-height: 1;
+  }
+
+  /* Active feedback for touch */
+  .touch-feedback {
+    @apply transition-transform duration-75 active:scale-95;
+  }
+}

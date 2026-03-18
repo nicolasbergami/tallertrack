@@ -1,0 +1,24 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: tallertrack_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: tallertrack_dev
+      POSTGRES_DB: tallertrack
+    ports:
+      - "5432:5432"
+    volumes:
+      - tallertrack_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d tallertrack"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  tallertrack_pgdata:
+    driver: local
