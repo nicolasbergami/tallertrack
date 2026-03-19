@@ -7,9 +7,11 @@ import { BigButton } from "../../components/ui/BigButton";
 import { StatusTimeline } from "./StatusTimeline";
 import { ActionBar } from "./ActionBar";
 import { AiQuoteModal } from "./AiQuoteModal";
+import { PaymentModal } from "./PaymentModal";
 import { workOrdersApi } from "../../api/work-orders.api";
 import { getStatusConfig, formatElapsed } from "../../config/status.config";
 import { IconWrench, IconQr, IconDownload, IconPhone } from "../../components/ui/Icons";
+import { PAYMENT_METHOD_LABELS } from "../../types/work-order";
 
 // Statuses where a mechanic can dictate a quote
 const AI_QUOTE_STATUSES = ["diagnosing", "awaiting_parts", "in_progress"] as const;
@@ -17,8 +19,10 @@ const AI_QUOTE_STATUSES = ["diagnosing", "awaiting_parts", "in_progress"] as con
 export function OrderDetail() {
   const { id }      = useParams<{ id: string }>();
   const qc          = useQueryClient();
-  const [qrModal,   setQrModal]   = useState(false);
-  const [aiModal,   setAiModal]   = useState(false);
+  const [qrModal,      setQrModal]      = useState(false);
+  const [aiModal,      setAiModal]      = useState(false);
+  const [payModal,     setPayModal]     = useState(false);
+  const [remitoLoading, setRemitoLoading] = useState(false);
 
   const { data: order, isLoading, error } = useQuery({
     queryKey:    ["work-order", id],
@@ -60,7 +64,24 @@ export function OrderDetail() {
   const cfg = getStatusConfig(order.status);
   const elapsed = formatElapsed(order.received_at);
 
-  const canDictateQuote = (AI_QUOTE_STATUSES as readonly string[]).includes(order.status);
+  const canDictateQuote  = (AI_QUOTE_STATUSES as readonly string[]).includes(order.status);
+  const isPaid           = order.payment_status === "paid";
+
+  async function handleDownloadRemito() {
+    if (!order) return;
+    setRemitoLoading(true);
+    try {
+      const blob = await workOrdersApi.downloadRemito(order.id);
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement("a");
+      a.href     = url;
+      a.download = `Remito-${order.order_number}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setRemitoLoading(false);
+    }
+  }
 
   return (
     <AppShell
@@ -151,6 +172,72 @@ export function OrderDetail() {
           </section>
         )}
 
+        {/* ── Payment section ── */}
+        <section className="mx-4 mt-3">
+          {isPaid ? (
+            /* Paid — green summary card */
+            <div className="bg-emerald-950/40 rounded-2xl p-4 border border-emerald-800/50 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-900/60 flex items-center justify-center flex-shrink-0">
+                <span className="text-lg">✓</span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-emerald-500 uppercase tracking-wide">Cobrado</p>
+                <p className="text-sm font-bold text-emerald-100 mt-0.5">
+                  ${order.paid_amount?.toLocaleString("es-AR") ?? "—"}
+                  {order.payment_method && (
+                    <span className="text-emerald-400/70 font-normal ml-2">
+                      · {PAYMENT_METHOD_LABELS[order.payment_method]}
+                    </span>
+                  )}
+                </p>
+                {order.payment_notes && (
+                  <p className="text-xs text-emerald-400/60 mt-0.5 truncate">{order.payment_notes}</p>
+                )}
+              </div>
+              <button
+                onClick={handleDownloadRemito}
+                disabled={remitoLoading}
+                className="flex-shrink-0 h-9 px-3 rounded-xl bg-emerald-900/60 hover:bg-emerald-900
+                           border border-emerald-700/50 text-emerald-300 text-xs font-semibold
+                           flex items-center gap-1.5 transition-colors disabled:opacity-50"
+              >
+                <IconDownload className="w-3.5 h-3.5" />
+                {remitoLoading ? "…" : "PDF"}
+              </button>
+            </div>
+          ) : (
+            /* Not paid — action row */
+            <div className="bg-amber-950/30 rounded-2xl p-4 border border-amber-800/40 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-900/40 flex items-center justify-center flex-shrink-0">
+                <span className="text-lg">💰</span>
+              </div>
+              <div className="flex-1">
+                <p className="text-xs font-semibold text-amber-500 uppercase tracking-wide">Pago pendiente</p>
+                <p className="text-xs text-amber-400/60 mt-0.5">Sin cobro registrado</p>
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <button
+                  onClick={handleDownloadRemito}
+                  disabled={remitoLoading}
+                  className="h-9 px-3 rounded-xl border border-surface-border text-slate-400
+                             hover:text-slate-200 text-xs font-semibold flex items-center gap-1.5
+                             transition-colors disabled:opacity-50"
+                >
+                  <IconDownload className="w-3.5 h-3.5" />
+                  {remitoLoading ? "…" : "Remito"}
+                </button>
+                <button
+                  onClick={() => setPayModal(true)}
+                  className="h-9 px-4 rounded-xl bg-brand hover:bg-brand-hover text-white
+                             text-xs font-bold transition-colors"
+                >
+                  Cobrar
+                </button>
+              </div>
+            </div>
+          )}
+        </section>
+
         {/* ── Assigned mechanic + delivery ── */}
         <section className="mx-4 mt-3 grid grid-cols-2 gap-3">
           <div className="bg-surface-card rounded-2xl p-3 border border-surface-border">
@@ -177,6 +264,14 @@ export function OrderDetail() {
         {/* ── Action bar ── */}
         <ActionBar order={order} />
       </div>
+
+      {/* ── Payment Modal ── */}
+      {payModal && (
+        <PaymentModal
+          order={order}
+          onClose={() => setPayModal(false)}
+        />
+      )}
 
       {/* ── AI Quote Modal ── */}
       {aiModal && (

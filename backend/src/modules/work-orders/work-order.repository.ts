@@ -1,5 +1,5 @@
 import { PoolClient } from "pg";
-import { WorkOrder, WorkOrderDetail, CreateWorkOrderDTO, WorkOrderStatus, CreateQuoteDTO, QuoteWithItems } from "./work-order.types";
+import { WorkOrder, WorkOrderDetail, CreateWorkOrderDTO, WorkOrderStatus, CreateQuoteDTO, QuoteWithItems, RecordPaymentDTO } from "./work-order.types";
 import { createHttpError } from "../../middleware/error.middleware";
 
 // ---------------------------------------------------------------------------
@@ -164,6 +164,53 @@ export const workOrderRepository = {
 
     if (!rows[0]) throw createHttpError(404, `Orden de trabajo ${id} no encontrada.`);
     return rows[0];
+  },
+
+  async recordPayment(
+    client: PoolClient,
+    id: string,
+    tenantId: string,
+    dto: RecordPaymentDTO
+  ): Promise<WorkOrder> {
+    const { rows } = await client.query<WorkOrder>(
+      `UPDATE work_orders
+          SET payment_status = 'paid',
+              payment_method = $3,
+              paid_amount    = $4,
+              paid_at        = NOW(),
+              payment_notes  = $5,
+              updated_at     = NOW()
+        WHERE id = $1
+          AND tenant_id = $2
+          AND deleted_at IS NULL
+       RETURNING *`,
+      [id, tenantId, dto.payment_method, dto.paid_amount, dto.payment_notes ?? null]
+    );
+    if (!rows[0]) throw createHttpError(404, `Orden de trabajo ${id} no encontrada.`);
+    return rows[0];
+  },
+
+  async getLatestQuote(
+    client: PoolClient,
+    workOrderId: string,
+    tenantId: string
+  ): Promise<QuoteWithItems | null> {
+    const { rows: quoteRows } = await client.query(
+      `SELECT * FROM quotes
+        WHERE work_order_id = $1
+          AND tenant_id = $2
+        ORDER BY created_at DESC
+        LIMIT 1`,
+      [workOrderId, tenantId]
+    );
+    if (!quoteRows[0]) return null;
+    const quote = quoteRows[0];
+
+    const { rows: itemRows } = await client.query(
+      `SELECT * FROM quote_items WHERE quote_id = $1 ORDER BY created_at`,
+      [quote.id]
+    );
+    return { ...quote, items: itemRows };
   },
 
   async createQuote(

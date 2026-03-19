@@ -1,7 +1,16 @@
 import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { workOrderService } from "./work-order.service";
-import { WORK_ORDER_STATUSES, WorkOrderStatus, CreateQuoteDTO, CreateQuoteItemDTO } from "./work-order.types";
+import { WORK_ORDER_STATUSES, WorkOrderStatus, CreateQuoteDTO, CreateQuoteItemDTO, RecordPaymentDTO } from "./work-order.types";
+
+// ---------------------------------------------------------------------------
+// Payment schema
+// ---------------------------------------------------------------------------
+const recordPaymentSchema = z.object({
+  payment_method: z.enum(["cash", "transfer", "card", "mercadopago", "other"]),
+  paid_amount:    z.number().positive(),
+  payment_notes:  z.string().optional(),
+});
 
 // ---------------------------------------------------------------------------
 // Quote schema
@@ -163,6 +172,37 @@ export const workOrderController = {
         req.params.id
       );
       res.json({ tracking_url: url, qr_base64: base64 });
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  // PATCH /work-orders/:id/payment — record a payment
+  async recordPayment(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const dto = recordPaymentSchema.parse(req.body) as RecordPaymentDTO;
+      const order = await workOrderService.recordPayment(
+        req.user.tenant_id,
+        req.params.id,
+        dto
+      );
+      res.json(order);
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  // GET /work-orders/:id/remito — download remito PDF
+  async getRemitoPdf(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const pdfBuffer = await workOrderService.getRemitoPdf(
+        req.user.tenant_id,
+        req.params.id
+      );
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="remito-${req.params.id}.pdf"`);
+      res.setHeader("Cache-Control", "no-store");
+      res.send(pdfBuffer);
     } catch (err) {
       next(err);
     }

@@ -78,4 +78,23 @@ router.post(
   workOrderController.createQuote,
 );
 
+/**
+ * @route   PATCH /api/v1/work-orders/:id/payment
+ * @desc    Record a payment for a work order
+ * @body    { payment_method, paid_amount, payment_notes? }
+ * @access  owner, admin, receptionist
+ */
+router.patch(
+  "/:id/payment",
+  authorize("owner", "admin", "receptionist"),
+  workOrderController.recordPayment,
+);
+
+/**
+ * @route   GET /api/v1/work-orders/:id/remito
+ * @desc    Download remito PDF for a work order
+ * @access  All authenticated roles
+ */
+router.get("/:id/remito", workOrderController.getRemitoPdf);
+
 export default router;

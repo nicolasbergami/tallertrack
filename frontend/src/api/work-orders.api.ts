@@ -4,7 +4,14 @@ import {
   WorkOrderStatus,
   CreateWorkOrderDTO,
   TransitionDTO,
+  PaymentMethod,
 } from "../types/work-order";
+
+export interface RecordPaymentDTO {
+  payment_method: PaymentMethod;
+  paid_amount:    number;
+  payment_notes?: string;
+}
 
 interface ListResponse {
   data: WorkOrderDetail[];
@@ -48,4 +55,10 @@ export const workOrdersApi = {
 
   getQrBlob: (id: string) =>
     api.getBlob(`/work-orders/${id}/qr`),
+
+  recordPayment: (id: string, dto: RecordPaymentDTO) =>
+    api.patch<WorkOrderDetail>(`/work-orders/${id}/payment`, dto),
+
+  downloadRemito: (id: string) =>
+    api.getBlob(`/work-orders/${id}/remito`),
 };

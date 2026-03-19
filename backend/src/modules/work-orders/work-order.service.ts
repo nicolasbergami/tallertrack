@@ -14,7 +14,9 @@ import {
   TransitionWorkOrderDTO,
   CreateQuoteDTO,
   QuoteWithItems,
+  RecordPaymentDTO,
 } from "./work-order.types";
+import { generateRemitoPdf } from "./remito.generator";
 import { env } from "../../config/env";
 import { createHttpError } from "../../middleware/error.middleware";
 
@@ -209,6 +211,45 @@ export const workOrderService = {
     return withTenantTransaction(tenantId, (client) =>
       workOrderRepository.createQuote(client, tenantId, workOrderId, dto),
     );
+  },
+
+  // -------------------------------------------------------------------------
+  // Record a payment for a work order
+  // -------------------------------------------------------------------------
+  async recordPayment(
+    tenantId: string,
+    workOrderId: string,
+    dto: RecordPaymentDTO
+  ): Promise<WorkOrderDetail> {
+    return withTenantTransaction(tenantId, async (client) => {
+      await workOrderRepository.recordPayment(client, workOrderId, tenantId, dto);
+      return workOrderRepository.findById(client, workOrderId, tenantId);
+    });
+  },
+
+  // -------------------------------------------------------------------------
+  // Generate remito PDF for a work order
+  // -------------------------------------------------------------------------
+  async getRemitoPdf(tenantId: string, workOrderId: string): Promise<Buffer> {
+    const [order, tenantInfo] = await Promise.all([
+      this.getById(tenantId, workOrderId),
+      withTenantContext(tenantId, async (client) => {
+        const { rows } = await client.query<{
+          name: string; tax_id: string | null; phone: string | null;
+          email: string | null; address: string | null; city: string | null;
+        }>(
+          `SELECT name, tax_id, phone, email, address, city FROM tenants WHERE id = $1`,
+          [tenantId]
+        );
+        return rows[0];
+      }),
+    ]);
+
+    const quote = await withTenantContext(tenantId, (client) =>
+      workOrderRepository.getLatestQuote(client, workOrderId, tenantId)
+    );
+
+    return generateRemitoPdf(order, quote, tenantInfo);
   },
 
   // -------------------------------------------------------------------------

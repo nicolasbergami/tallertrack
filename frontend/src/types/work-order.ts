@@ -13,6 +13,17 @@ export const WORK_ORDER_STATUSES = [
 
 export type WorkOrderStatus = (typeof WORK_ORDER_STATUSES)[number];
 
+export type PaymentStatus = "pending" | "partial" | "paid";
+export type PaymentMethod = "cash" | "transfer" | "card" | "mercadopago" | "other";
+
+export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
+  cash:        "Efectivo",
+  transfer:    "Transferencia",
+  card:        "Tarjeta",
+  mercadopago: "Mercado Pago",
+  other:       "Otro",
+};
+
 export interface WorkOrderDetail {
   id: string;
   tenant_id: string;
@@ -33,6 +44,12 @@ export interface WorkOrderDetail {
   delivered_at: string | null;
   created_at: string;
   updated_at: string;
+  // Payment fields
+  payment_status: PaymentStatus;
+  payment_method: PaymentMethod | null;
+  paid_amount:    number | null;
+  paid_at:        string | null;
+  payment_notes:  string | null;
   // Joined fields
   client_name: string;
   client_phone: string | null;

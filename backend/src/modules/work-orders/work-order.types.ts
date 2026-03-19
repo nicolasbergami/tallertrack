@@ -46,6 +46,12 @@ export interface WorkOrder {
   created_at: Date;
   updated_at: Date;
   deleted_at: Date | null;
+  // Payment fields (added in migration 004)
+  payment_status: PaymentStatus;
+  payment_method: PaymentMethod | null;
+  paid_amount:    number | null;
+  paid_at:        Date | null;
+  payment_notes:  string | null;
 }
 
 // Joined view with client & vehicle info (for responses)
@@ -90,6 +96,27 @@ export interface TransitionWorkOrderDTO {
   diagnosis?: string;
   internal_notes?: string;
   mileage_out?: number;
+}
+
+// ---------------------------------------------------------------------------
+// Payments
+// ---------------------------------------------------------------------------
+
+export type PaymentStatus = "pending" | "partial" | "paid";
+export type PaymentMethod = "cash" | "transfer" | "card" | "mercadopago" | "other";
+
+export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
+  cash:        "Efectivo",
+  transfer:    "Transferencia",
+  card:        "Tarjeta",
+  mercadopago: "Mercado Pago",
+  other:       "Otro",
+};
+
+export interface RecordPaymentDTO {
+  payment_method: PaymentMethod;
+  paid_amount:    number;
+  payment_notes?: string;
 }
 
 // ---------------------------------------------------------------------------
