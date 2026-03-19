@@ -58,7 +58,8 @@ export function AudioRecorder({ onTranscriptReady, onError }: Props) {
 
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const timerRef       = useRef<ReturnType<typeof setInterval> | null>(null);
-  const finalRef       = useRef("");  // accumulates final parts
+  const finalRef       = useRef("");   // accumulates final transcript chunks
+  const isRecordingRef = useRef(false); // mirrors "recording" state for closures
 
   // Check browser support
   const SpeechRecognition =
@@ -69,6 +70,7 @@ export function AudioRecorder({ onTranscriptReady, onError }: Props) {
   const isSupported = !!SpeechRecognition;
 
   const stopRecording = useCallback((fromTimer = false) => {
+    isRecordingRef.current = false;
     recognitionRef.current?.stop();
     if (timerRef.current) clearInterval(timerRef.current);
     setState("done");
@@ -82,7 +84,8 @@ export function AudioRecorder({ onTranscriptReady, onError }: Props) {
   const startRecording = useCallback(() => {
     if (!SpeechRecognition) return;
 
-    finalRef.current  = "";
+    finalRef.current       = "";
+    isRecordingRef.current = true;
     setTranscript("");
     setInterim("");
     setSeconds(0);
@@ -124,8 +127,9 @@ export function AudioRecorder({ onTranscriptReady, onError }: Props) {
     };
 
     recognition.onend = () => {
-      // auto-restart if still recording (continuous can stop unexpectedly)
-      if (recognitionRef.current === recognition && state === "recording") {
+      // auto-restart if still recording (continuous mode can stop unexpectedly).
+      // Use isRecordingRef instead of `state` to avoid stale closure capture.
+      if (recognitionRef.current === recognition && isRecordingRef.current) {
         try { recognition.start(); } catch (_) { /* already started */ }
       }
     };
@@ -142,7 +146,7 @@ export function AudioRecorder({ onTranscriptReady, onError }: Props) {
         return s + 1;
       });
     }, 1000);
-  }, [SpeechRecognition, state, stopRecording, onError]);
+  }, [SpeechRecognition, stopRecording, onError]);
 
   // Cleanup on unmount
   useEffect(() => {

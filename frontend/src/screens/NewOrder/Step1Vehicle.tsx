@@ -1,5 +1,7 @@
-import { ReactNode, useState } from "react";
+import { useState } from "react";
 import { NewOrderFormState } from "../../types/work-order";
+import { MetalField } from "../../components/ui/MetalField";
+import { vehiclesApi } from "../../api/vehicles.api";
 
 interface Props {
   form: NewOrderFormState;
@@ -7,7 +9,7 @@ interface Props {
   onNext: () => void;
 }
 
-// Color palette — name, real hex, and poetry label
+// ── Color palette ─────────────────────────────────────────────────────────────
 const COLORS = [
   { name: "Blanco",   hex: "#F1F5F9", label: "Blanco Glaciar" },
   { name: "Negro",    hex: "#111827", label: "Negro Profundo" },
@@ -19,49 +21,73 @@ const COLORS = [
   { name: "Otro",     hex: null,      label: "Otro"          },
 ] as const;
 
-// Simulated vehicle database for plate lookup
-const MOCK_VEHICLES = [
-  { brand: "Toyota",     model: "Corolla",  year: "2020" },
-  { brand: "Volkswagen", model: "Gol",      year: "2019" },
-  { brand: "Renault",    model: "Sandero",  year: "2021" },
-  { brand: "Ford",       model: "Focus",    year: "2018" },
-  { brand: "Chevrolet",  model: "Cruze",    year: "2022" },
-  { brand: "Peugeot",    model: "208",      year: "2020" },
-  { brand: "Honda",      model: "Civic",    year: "2019" },
-  { brand: "Fiat",       model: "Cronos",   year: "2021" },
-];
+// ── Argentine plate validation ────────────────────────────────────────────────
+// Old format: ABC123 (3 letters + 3 digits)
+// Mercosur format: AB123CD (2 letters + 3 digits + 2 letters)
+const PLATE_RE = /^([A-Z]{3}\d{3}|[A-Z]{2}\d{3}[A-Z]{2})$/;
 
-// ── Main Component ────────────────────────────────────────────────────────────
+function isValidPlate(p: string): boolean {
+  return PLATE_RE.test(p);
+}
+
+// ── Component ─────────────────────────────────────────────────────────────────
 
 export function Step1Vehicle({ form, onChange, onNext }: Props) {
-  const [errors, setErrors]         = useState<Partial<Record<keyof NewOrderFormState, string>>>({});
+  const [errors,       setErrors]       = useState<Partial<Record<keyof NewOrderFormState, string>>>({});
   const [plateFocused, setPlateFocused] = useState(false);
-  const [searching, setSearching]   = useState(false);
-  const [validated, setValidated]   = useState(false);
+  const [searching,    setSearching]    = useState(false);
+  const [lookupResult, setLookupResult] = useState<"found" | "not_found" | null>(null);
 
   const validate = () => {
     const e: typeof errors = {};
-    if (!form.license_plate.trim()) e.license_plate = "Ingresa la patente";
-    if (!form.brand.trim())         e.brand          = "Ingresa la marca";
-    if (!form.model.trim())         e.model          = "Ingresa el modelo";
+    if (!form.license_plate.trim())         e.license_plate = "Ingresa la patente";
+    else if (!isValidPlate(form.license_plate)) e.license_plate = "Formato inválido · ej: ABC123 o AB123CD";
+    if (!form.brand.trim())                 e.brand          = "Ingresa la marca";
+    if (!form.model.trim())                 e.model          = "Ingresa el modelo";
     setErrors(e);
     return Object.keys(e).length === 0;
   };
 
   const handlePlate = (v: string) => {
-    onChange({ license_plate: v.replace(/\s/g, "").toUpperCase().slice(0, 8) });
-    setValidated(false);
+    const clean = v.replace(/\s/g, "").toUpperCase().slice(0, 8);
+    onChange({ license_plate: clean, vehicle_id: null, client_id: null });
+    setLookupResult(null);
   };
 
   const searchPlate = async () => {
-    if (!form.license_plate.trim() || searching) return;
+    const plate = form.license_plate.trim();
+    if (!plate || searching) return;
+
     setSearching(true);
-    await new Promise((r) => setTimeout(r, 1400));
-    const mock = MOCK_VEHICLES[Math.floor(Math.random() * MOCK_VEHICLES.length)];
-    onChange({ brand: mock.brand, model: mock.model, year: mock.year });
-    setValidated(true);
-    setSearching(false);
+    try {
+      const result = await vehiclesApi.lookupByPlate(plate);
+
+      if (result.found) {
+        // Populate vehicle + client data so Step2 is pre-filled
+        onChange({
+          vehicle_id:    result.vehicle.id,
+          brand:         result.vehicle.brand,
+          model:         result.vehicle.model,
+          year:          result.vehicle.year    ? String(result.vehicle.year)    : "",
+          color:         result.vehicle.color   ?? "",
+          mileage_in:    result.vehicle.mileage_km ? String(result.vehicle.mileage_km) : "",
+          client_id:     result.vehicle.client.id,
+          client_name:   result.vehicle.client.name,
+          client_phone:  result.vehicle.client.phone  ?? "",
+          client_email:  result.vehicle.client.email  ?? "",
+        });
+        setLookupResult("found");
+      } else {
+        setLookupResult("not_found");
+      }
+    } catch {
+      setLookupResult(null);
+    } finally {
+      setSearching(false);
+    }
   };
+
+  const isFromDB = lookupResult === "found";
 
   return (
     <div className="flex flex-col gap-6 p-4 pb-8 animate-slide-up">
@@ -89,12 +115,9 @@ export function Step1Vehicle({ form, onChange, onNext }: Props) {
               background: "linear-gradient(180deg, #1C2535 0%, #0F1927 100%)",
             }}
           >
-            {/* Laser scan animation — shows on focus */}
+            {/* Laser scan animation */}
             {plateFocused && (
-              <div
-                className="absolute inset-0 pointer-events-none overflow-hidden"
-                style={{ borderRadius: "inherit" }}
-              >
+              <div className="absolute inset-0 pointer-events-none overflow-hidden" style={{ borderRadius: "inherit" }}>
                 <div
                   className="absolute top-0 bottom-0 animate-laser-scan"
                   style={{
@@ -122,7 +145,7 @@ export function Step1Vehicle({ form, onChange, onNext }: Props) {
               onChange={(e) => handlePlate(e.target.value)}
               onFocus={() => setPlateFocused(true)}
               onBlur={() => setPlateFocused(false)}
-              placeholder="ABCD12"
+              placeholder="ABC123"
               maxLength={8}
               inputMode="text"
               autoCapitalize="characters"
@@ -133,12 +156,16 @@ export function Step1Vehicle({ form, onChange, onNext }: Props) {
                 fontWeight: 900,
                 color: errors.license_plate
                   ? "#F87171"
+                  : isFromDB
+                    ? "#4ADE80"
+                    : plateFocused
+                      ? "#F97316"
+                      : "#F1F5F9",
+                textShadow: isFromDB
+                  ? "0 0 20px rgba(74,222,128,0.4)"
                   : plateFocused
-                    ? "#F97316"
-                    : "#F1F5F9",
-                textShadow: plateFocused
-                  ? "0 0 24px rgba(249,115,22,0.5), 0 2px 8px rgba(0,0,0,0.6)"
-                  : "0 2px 8px rgba(0,0,0,0.5)",
+                    ? "0 0 24px rgba(249,115,22,0.5), 0 2px 8px rgba(0,0,0,0.6)"
+                    : "0 2px 8px rgba(0,0,0,0.5)",
               }}
             />
           </div>
@@ -148,19 +175,27 @@ export function Step1Vehicle({ form, onChange, onNext }: Props) {
           <p className="text-xs text-red-400 font-medium">{errors.license_plate}</p>
         )}
 
-        {/* Helper text + search button */}
-        <div className="flex items-center justify-between">
-          <p className="text-xs text-slate-500">Sin guión · ej: ABCD12 · ABC123</p>
+        {/* Helper + search button */}
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-xs text-slate-500">
+            Sin guión · ABC123 (viejo) · AB123CD (Mercosur)
+          </p>
 
           <button
             type="button"
             onClick={searchPlate}
             disabled={searching || !form.license_plate.trim()}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 disabled:opacity-40 active:scale-95"
+            className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 disabled:opacity-40 active:scale-95"
             style={{
-              background: validated ? "rgba(34,197,94,0.08)"   : "rgba(249,115,22,0.08)",
-              border:     validated ? "1px solid rgba(34,197,94,0.25)" : "1px solid rgba(249,115,22,0.22)",
-              color:      validated ? "#4ADE80" : "#F97316",
+              background: isFromDB
+                ? "rgba(34,197,94,0.08)"
+                : lookupResult === "not_found"
+                  ? "rgba(249,115,22,0.06)"
+                  : "rgba(249,115,22,0.08)",
+              border: isFromDB
+                ? "1px solid rgba(34,197,94,0.25)"
+                : "1px solid rgba(249,115,22,0.22)",
+              color: isFromDB ? "#4ADE80" : "#F97316",
             }}
           >
             {searching ? (
@@ -171,23 +206,30 @@ export function Step1Vehicle({ form, onChange, onNext }: Props) {
                 </svg>
                 Buscando…
               </>
-            ) : validated ? (
+            ) : isFromDB ? (
               <>
                 <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                 </svg>
-                Validado
+                Registrado
               </>
             ) : (
               <>
                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
-                Buscar en base
+                {lookupResult === "not_found" ? "Patente nueva" : "Buscar en taller"}
               </>
             )}
           </button>
         </div>
+
+        {/* "Not found" hint */}
+        {lookupResult === "not_found" && (
+          <p className="text-xs text-amber-400/80 animate-fade-in">
+            Patente no encontrada en el taller · Completa los datos manualmente
+          </p>
+        )}
       </div>
 
       {/* ── BRAND + MODEL ──────────────────────────────────────────────────── */}
@@ -198,7 +240,7 @@ export function Step1Vehicle({ form, onChange, onNext }: Props) {
           onChange={(v) => onChange({ brand: v })}
           placeholder="Toyota"
           error={errors.brand}
-          validated={validated && !!form.brand}
+          validated={isFromDB && !!form.brand}
           icon={
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z" />
@@ -212,7 +254,7 @@ export function Step1Vehicle({ form, onChange, onNext }: Props) {
           onChange={(v) => onChange({ model: v })}
           placeholder="Corolla"
           error={errors.model}
-          validated={validated && !!form.model}
+          validated={isFromDB && !!form.model}
         />
       </div>
 
@@ -225,7 +267,7 @@ export function Step1Vehicle({ form, onChange, onNext }: Props) {
           placeholder={String(new Date().getFullYear())}
           type="number"
           inputMode="numeric"
-          validated={validated && !!form.year}
+          validated={isFromDB && !!form.year}
           icon={
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -233,13 +275,14 @@ export function Step1Vehicle({ form, onChange, onNext }: Props) {
           }
         />
         <MetalField
-          label="Kilometraje"
+          label="Kilometraje actual"
           value={form.mileage_in}
           onChange={(v) => onChange({ mileage_in: v })}
           placeholder="85000"
           type="number"
           inputMode="numeric"
           suffix="km"
+          hint={isFromDB && form.mileage_in ? "Último registrado — puedes actualizarlo" : undefined}
           icon={
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
@@ -255,7 +298,6 @@ export function Step1Vehicle({ form, onChange, onNext }: Props) {
           {COLORS.map((c) => {
             const isSelected = form.color === c.name;
 
-            // "Otro" — text chip with + icon
             if (c.hex === null) {
               return (
                 <button
@@ -266,8 +308,7 @@ export function Step1Vehicle({ form, onChange, onNext }: Props) {
                 >
                   <div
                     style={{
-                      padding: "2px",
-                      borderRadius: "50%",
+                      padding: "2px", borderRadius: "50%",
                       background: isSelected
                         ? "linear-gradient(135deg, #F97316, #EA580C)"
                         : "linear-gradient(135deg, #4B5563, #374151)",
@@ -277,30 +318,22 @@ export function Step1Vehicle({ form, onChange, onNext }: Props) {
                       transition: "all 0.2s",
                     }}
                   >
-                    <div
-                      className="w-7 h-7 rounded-full flex items-center justify-center"
+                    <div className="w-7 h-7 rounded-full flex items-center justify-center"
                       style={{ background: "linear-gradient(145deg, #374151, #1F2937)" }}
                     >
-                      <svg
-                        className="w-3.5 h-3.5"
-                        style={{ color: isSelected ? "#F97316" : "#6B7280" }}
-                        fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}
-                      >
+                      <svg className="w-3.5 h-3.5" style={{ color: isSelected ? "#F97316" : "#6B7280" }}
+                        fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
                       </svg>
                     </div>
                   </div>
-                  <span
-                    className="text-[9px] font-semibold text-center"
-                    style={{ color: isSelected ? "#F97316" : "#6B7280" }}
-                  >
+                  <span className="text-[9px] font-semibold" style={{ color: isSelected ? "#F97316" : "#6B7280" }}>
                     {c.name}
                   </span>
                 </button>
               );
             }
 
-            // Color dot with metal ring
             return (
               <button
                 key={c.name}
@@ -308,35 +341,25 @@ export function Step1Vehicle({ form, onChange, onNext }: Props) {
                 onClick={() => onChange({ color: c.name })}
                 className="flex flex-col items-center gap-1 touch-feedback"
               >
-                {/* Metal ring */}
-                <div
-                  style={{
-                    padding: "2px",
-                    borderRadius: "50%",
-                    background: isSelected
-                      ? "linear-gradient(135deg, #F97316, #EA580C)"
-                      : "linear-gradient(135deg, #4B5563, #2D3748)",
+                <div style={{
+                  padding: "2px", borderRadius: "50%",
+                  background: isSelected
+                    ? "linear-gradient(135deg, #F97316, #EA580C)"
+                    : "linear-gradient(135deg, #4B5563, #2D3748)",
+                  boxShadow: isSelected
+                    ? `0 0 14px rgba(249,115,22,0.5), 0 2px 8px rgba(0,0,0,0.5)`
+                    : "0 2px 6px rgba(0,0,0,0.4)",
+                  transition: "all 0.2s",
+                }}>
+                  <div style={{
+                    width: "28px", height: "28px", borderRadius: "50%",
+                    background: c.hex,
+                    border: c.name === "Blanco" ? "1px solid rgba(0,0,0,0.15)" : "none",
                     boxShadow: isSelected
-                      ? `0 0 14px rgba(249,115,22,0.5), 0 2px 8px rgba(0,0,0,0.5)`
-                      : "0 2px 6px rgba(0,0,0,0.4)",
-                    transition: "all 0.2s",
-                  }}
-                >
-                  {/* Color dot */}
-                  <div
-                    style={{
-                      width: "28px",
-                      height: "28px",
-                      borderRadius: "50%",
-                      background: c.hex,
-                      border: c.name === "Blanco" ? "1px solid rgba(0,0,0,0.15)" : "none",
-                      boxShadow: isSelected
-                        ? `inset 0 1px 0 rgba(255,255,255,0.25), 0 0 8px ${c.hex}80`
-                        : "inset 0 1px 0 rgba(255,255,255,0.1)",
-                    }}
-                  />
+                      ? `inset 0 1px 0 rgba(255,255,255,0.25), 0 0 8px ${c.hex}80`
+                      : "inset 0 1px 0 rgba(255,255,255,0.1)",
+                  }} />
                 </div>
-                {/* Label — shows name always, label only when selected */}
                 <span
                   className="text-[9px] font-semibold text-center leading-tight w-14 truncate transition-colors duration-200"
                   style={{ color: isSelected ? "#F97316" : "#4B5563" }}
@@ -361,154 +384,20 @@ export function Step1Vehicle({ form, onChange, onNext }: Props) {
             "0 1px 0 rgba(255,255,255,0.12) inset",
             "0 -2px 0 rgba(0,0,0,0.2) inset",
           ].join(", "),
-          letterSpacing: "0.01em",
         }}
       >
         <span>Siguiente: Cliente</span>
-
-        {/* Arrow with light trail */}
         <div className="relative flex items-center">
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
           </svg>
-          <div
-            className="absolute pointer-events-none"
-            style={{
-              right: 0,
-              width: "32px",
-              height: "20px",
-              background: "radial-gradient(ellipse at right, rgba(255,255,255,0.25), transparent 70%)",
-              transform: "translateX(50%)",
-            }}
-          />
+          <div className="absolute pointer-events-none" style={{
+            right: 0, width: "32px", height: "20px",
+            background: "radial-gradient(ellipse at right, rgba(255,255,255,0.25), transparent 70%)",
+            transform: "translateX(50%)",
+          }} />
         </div>
       </button>
-    </div>
-  );
-}
-
-// ── Metal Field Component ─────────────────────────────────────────────────────
-
-interface MetalFieldProps {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  placeholder?: string;
-  error?: string;
-  validated?: boolean;
-  type?: string;
-  inputMode?: "numeric" | "text" | "decimal";
-  suffix?: string;
-  icon?: ReactNode;
-}
-
-function MetalField({
-  label,
-  value,
-  onChange,
-  placeholder,
-  error,
-  validated,
-  type = "text",
-  inputMode,
-  suffix,
-  icon,
-}: MetalFieldProps) {
-  const [focused, setFocused] = useState(false);
-
-  const borderColor = error
-    ? "rgba(239,68,68,0.65)"
-    : focused
-      ? "rgba(249,115,22,0.55)"
-      : validated
-        ? "rgba(34,197,94,0.4)"
-        : "rgba(55,65,81,0.6)";
-
-  const outerGlow = error
-    ? "0 0 0 3px rgba(239,68,68,0.1)"
-    : focused
-      ? "0 0 0 3px rgba(249,115,22,0.1)"
-      : "none";
-
-  // Whether a validation icon should show (not while typing)
-  const showError    = !!error && !focused;
-  const showValid    = !!validated && !error;
-  const showIndicator = showError || showValid;
-  const indicatorRight = suffix ? "2.75rem" : "0.75rem";
-
-  return (
-    <div className="flex flex-col gap-1.5">
-      <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-        {label}
-      </label>
-
-      <div
-        className="relative transition-all duration-200"
-        style={{
-          borderRadius: "0.75rem",
-          border: `1px solid ${borderColor}`,
-          background: "linear-gradient(180deg, #1C2535 0%, #111827 100%)",
-          boxShadow: `inset 0 2px 4px rgba(0,0,0,0.35), ${outerGlow}`,
-        }}
-      >
-        {/* Left icon — color shifts on focus */}
-        {icon && (
-          <div
-            className="absolute left-3 top-1/2 -translate-y-1/2 transition-colors duration-200 pointer-events-none"
-            style={{ color: focused ? "#F97316" : "#4B5563" }}
-          >
-            {icon}
-          </div>
-        )}
-
-        <input
-          type={type}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
-          placeholder={placeholder}
-          inputMode={inputMode}
-          className={[
-            "w-full h-touch bg-transparent",
-            "rounded-[calc(0.75rem-1px)]",
-            "text-slate-100 placeholder-slate-600 text-base font-medium",
-            "focus:outline-none transition-colors duration-200",
-            icon    ? "pl-9" : "pl-4",
-            suffix  ? "pr-14" : showIndicator ? "pr-9" : "pr-4",
-            validated ? "animate-fill-in" : "",
-          ].join(" ")}
-        />
-
-        {/* Suffix label (e.g. "km") */}
-        {suffix && (
-          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-500 font-semibold pointer-events-none select-none">
-            {suffix}
-          </span>
-        )}
-
-        {/* Validation icon */}
-        {showIndicator && (
-          <div
-            className="absolute top-1/2 -translate-y-1/2 animate-fade-in"
-            style={{ right: indicatorRight }}
-          >
-            {showError ? (
-              <svg className="w-4 h-4 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            ) : (
-              <svg className="w-4 h-4 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-              </svg>
-            )}
-          </div>
-        )}
-      </div>
-
-      {error && (
-        <p className="text-xs text-red-400 font-medium">{error}</p>
-      )}
     </div>
   );
 }
