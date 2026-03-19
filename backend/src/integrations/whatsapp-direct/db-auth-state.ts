@@ -115,7 +115,7 @@ export async function usePostgresAuthState(tenantId: string): Promise<{
       const serialized = JSON.stringify(creds, BufferJSON.replacer);
       await pool.query(
         `INSERT INTO whatsapp_sessions (tenant_id, creds, status)
-         VALUES ($1, $2::jsonb, 'connecting')
+         VALUES ($1, $2::jsonb, 'pending')
          ON CONFLICT (tenant_id)
          DO UPDATE SET creds = EXCLUDED.creds, updated_at = NOW()`,
         [tenantId, serialized]

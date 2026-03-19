@@ -101,15 +101,28 @@ export const sessionManager = {
     // new Function() prevents TypeScript from compiling import() → require()
     // when module target is CommonJS.  Node.js evaluates the native import()
     // at runtime, which correctly handles ESM-only packages like Baileys.
-    const {
-      default: makeWASocket,
-      DisconnectReason,
-      fetchLatestBaileysVersion,
     // eslint-disable-next-line @typescript-eslint/no-implied-eval
-    } = await (new Function('return import("@whiskeysockets/baileys")')() as Promise<typeof import("@whiskeysockets/baileys")>);
+    const baileysModule = await (new Function('return import("@whiskeysockets/baileys")')() as Promise<typeof import("@whiskeysockets/baileys") & { Defaults?: { VERSION?: [number, number, number] } }>);
+    const { default: makeWASocket, DisconnectReason, fetchLatestBaileysVersion } = baileysModule;
 
     const { state, saveCreds } = await usePostgresAuthState(tenantId);
-    const { version } = await fetchLatestBaileysVersion();
+
+    // fetchLatestBaileysVersion makes an external HTTP request (GitHub/WA servers).
+    // In production it can hang indefinitely → apply a 10s timeout and fall back
+    // to the version bundled with the installed Baileys package.
+    let version: [number, number, number];
+    try {
+      const result = await Promise.race([
+        fetchLatestBaileysVersion(),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("version fetch timed out after 10s")), 10_000)
+        ),
+      ]);
+      version = result.version;
+    } catch (versionErr) {
+      console.warn(`[WhatsApp] Using bundled Baileys version (${(versionErr as Error).message})`);
+      version = baileysModule.Defaults?.VERSION ?? [2, 3000, 1015920];
+    }
 
     const socket = makeWASocket({
       version,
