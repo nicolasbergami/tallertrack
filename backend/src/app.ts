@@ -12,6 +12,9 @@ import { env } from "./config/env";
 
 const app = express();
 
+// Trust Railway / Render / Heroku reverse proxy (needed for rate-limit + req.ip)
+app.set("trust proxy", 1);
+
 // ---------------------------------------------------------------------------
 // Security headers
 // ---------------------------------------------------------------------------
