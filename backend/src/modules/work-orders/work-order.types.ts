@@ -58,9 +58,26 @@ export interface WorkOrderDetail extends WorkOrder {
   assigned_user_name: string | null;
 }
 
+export interface VehicleInlineData {
+  license_plate: string;
+  brand: string;
+  model: string;
+  year?: number;
+  color?: string;
+}
+
+export interface ClientInlineData {
+  full_name: string;
+  phone: string;
+  email?: string;
+}
+
 export interface CreateWorkOrderDTO {
-  vehicle_id: string;
-  client_id: string;
+  // Existing vehicle/client by ID — OR inline data to create them on the fly
+  vehicle_id?: string;
+  vehicle_data?: VehicleInlineData;
+  client_id?: string;
+  client_data?: ClientInlineData;
   complaint: string;
   mileage_in?: number;
   estimated_delivery?: string;
@@ -73,4 +90,46 @@ export interface TransitionWorkOrderDTO {
   diagnosis?: string;
   internal_notes?: string;
   mileage_out?: number;
+}
+
+// ---------------------------------------------------------------------------
+// Quotes
+// ---------------------------------------------------------------------------
+
+export type QuoteItemType = "labor" | "part" | "consumable" | "external_service";
+
+export interface CreateQuoteItemDTO {
+  type:        QuoteItemType;
+  description: string;
+  quantity:    number;
+  unit_price:  number;
+}
+
+export interface CreateQuoteDTO {
+  items: CreateQuoteItemDTO[];
+  notes?: string;
+}
+
+export interface QuoteItem {
+  id:          string;
+  quote_id:    string;
+  type:        QuoteItemType;
+  description: string;
+  quantity:    number;
+  unit_price:  number;
+}
+
+export interface QuoteWithItems {
+  id:            string;
+  tenant_id:     string;
+  work_order_id: string;
+  status:        "draft" | "sent" | "approved" | "rejected" | "expired";
+  subtotal:      number;
+  tax:           number;
+  total:         number;
+  notes:         string | null;
+  sent_at:       string | null;
+  responded_at:  string | null;
+  created_at:    string;
+  items:         QuoteItem[];
 }

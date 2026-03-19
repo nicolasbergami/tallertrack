@@ -1,10 +1,14 @@
 import express from "express";
 import helmet from "helmet";
+import path from "path";
+import fs from "fs";
 import { rateLimit } from "express-rate-limit";
 import { errorHandler } from "./middleware/error.middleware";
 import authRoutes       from "./modules/auth/auth.routes";
 import workOrderRoutes from "./modules/work-orders/work-order.routes";
 import publicRoutes    from "./modules/public/public.routes";
+import aiRoutes        from "./modules/ai/ai.routes";
+import { env } from "./config/env";
 
 const app = express();
 
@@ -46,13 +50,33 @@ app.get("/health", (_req, res) => {
 app.use("/api/v1/auth",        authRoutes);
 app.use("/api/v1/work-orders", workOrderRoutes);
 app.use("/api/v1/public",      publicRoutes);
+app.use("/api/v1/ai",          aiRoutes);
 
 // ---------------------------------------------------------------------------
-// 404 handler
+// Serve frontend static files in production
+// In development, Vite dev server handles the frontend separately.
 // ---------------------------------------------------------------------------
-app.use((_req, res) => {
-  res.status(404).json({ error: "Ruta no encontrada." });
-});
+if (env.NODE_ENV === "production") {
+  // backend/dist/ → ../../frontend/dist/ in the monorepo layout
+  const frontendDist = path.join(__dirname, "..", "..", "frontend", "dist");
+  const indexHtml    = path.join(frontendDist, "index.html");
+
+  if (fs.existsSync(frontendDist)) {
+    app.use(express.static(frontendDist));
+
+    // SPA fallback — serve index.html for any non-API route
+    app.get("*", (_req, res) => {
+      res.sendFile(indexHtml);
+    });
+  }
+} else {
+  // ---------------------------------------------------------------------------
+  // 404 handler (dev only — in prod the SPA catch-all handles unknown routes)
+  // ---------------------------------------------------------------------------
+  app.use((_req, res) => {
+    res.status(404).json({ error: "Ruta no encontrada." });
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Global error handler (must be last)

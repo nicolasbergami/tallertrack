@@ -84,7 +84,7 @@ export const publicService = {
             ORDER BY sort_order, created_at`,
           [q.id, tenant.id]
         );
-        publicQuotes.push({ ...q, items });
+        publicQuotes.push({ ...q, items } as any);
       }
 
       // 4. Status-change history (only status_changed events, no internal details)

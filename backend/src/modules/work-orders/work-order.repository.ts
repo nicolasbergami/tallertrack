@@ -1,5 +1,5 @@
 import { PoolClient } from "pg";
-import { WorkOrder, WorkOrderDetail, CreateWorkOrderDTO, WorkOrderStatus } from "./work-order.types";
+import { WorkOrder, WorkOrderDetail, CreateWorkOrderDTO, WorkOrderStatus, CreateQuoteDTO, QuoteWithItems } from "./work-order.types";
 import { createHttpError } from "../../middleware/error.middleware";
 
 // ---------------------------------------------------------------------------
@@ -164,5 +164,58 @@ export const workOrderRepository = {
 
     if (!rows[0]) throw createHttpError(404, `Orden de trabajo ${id} no encontrada.`);
     return rows[0];
+  },
+
+  async createQuote(
+    client: PoolClient,
+    tenantId: string,
+    workOrderId: string,
+    dto: CreateQuoteDTO,
+  ): Promise<QuoteWithItems> {
+    const TAX_RATE = 0.19; // IVA Chile
+
+    // Subtotal before tax
+    const subtotal = dto.items.reduce(
+      (sum, i) => sum + i.unit_price * i.quantity,
+      0,
+    );
+    const tax   = Math.round(subtotal * TAX_RATE);
+    const total = subtotal + tax;
+
+    // Insert quote
+    const { rows: quoteRows } = await client.query(
+      `INSERT INTO quotes
+         (tenant_id, work_order_id, status, subtotal, tax, total, notes)
+       VALUES ($1, $2, 'draft', $3, $4, $5, $6)
+       RETURNING *`,
+      [tenantId, workOrderId, subtotal, tax, total, dto.notes ?? null],
+    );
+    const quote = quoteRows[0];
+
+    if (!dto.items.length) {
+      return { ...quote, items: [] };
+    }
+
+    // Bulk-insert items
+    const itemParams: unknown[] = [];
+    dto.items.forEach((i) => {
+      itemParams.push(quote.id, i.type, i.description, i.quantity, i.unit_price);
+    });
+
+    const valuesClause = dto.items
+      .map((_, idx) => {
+        const base = idx * 5;
+        return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5})`;
+      })
+      .join(", ");
+
+    const { rows: itemRows } = await client.query(
+      `INSERT INTO quote_items (quote_id, type, description, quantity, unit_price)
+       VALUES ${valuesClause}
+       RETURNING *`,
+      itemParams,
+    );
+
+    return { ...quote, items: itemRows };
   },
 };

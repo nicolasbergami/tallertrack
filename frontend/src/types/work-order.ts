@@ -42,8 +42,10 @@ export interface WorkOrderDetail {
 }
 
 export interface CreateWorkOrderDTO {
-  vehicle_id: string;
-  client_id: string;
+  vehicle_id?: string;
+  vehicle_data?: { license_plate: string; brand: string; model: string; year?: number; color?: string };
+  client_id?: string;
+  client_data?: { full_name: string; phone: string; email?: string };
   complaint: string;
   mileage_in?: number;
   estimated_delivery?: string;

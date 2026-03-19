@@ -1,23 +1,60 @@
 import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { workOrderService } from "./work-order.service";
-import { WORK_ORDER_STATUSES, WorkOrderStatus } from "./work-order.types";
+import { WORK_ORDER_STATUSES, WorkOrderStatus, CreateQuoteDTO, CreateQuoteItemDTO } from "./work-order.types";
+
+// ---------------------------------------------------------------------------
+// Quote schema
+// ---------------------------------------------------------------------------
+const quoteItemSchema = z.object({
+  type:        z.enum(["labor", "part", "consumable", "external_service"]),
+  description: z.string().min(1),
+  quantity:    z.number().positive(),
+  unit_price:  z.number().min(0),
+});
+
+const createQuoteSchema = z.object({
+  items: z.array(quoteItemSchema).min(1, "El presupuesto debe tener al menos 1 ítem"),
+  notes: z.string().optional(),
+});
 
 // ---------------------------------------------------------------------------
 // Input validation schemas (Zod)
 // ---------------------------------------------------------------------------
-const createSchema = z.object({
-  vehicle_id:          z.string().uuid(),
-  client_id:           z.string().uuid(),
-  complaint:           z.string().min(5, "Describa la falla con al menos 5 caracteres."),
-  mileage_in:          z.number().int().positive().optional(),
-  estimated_delivery:  z.string().datetime({ offset: true }).optional(),
-  assigned_to:         z.string().uuid().optional(),
-  internal_notes:      z.string().optional(),
+const vehicleDataSchema = z.object({
+  license_plate: z.string().min(1).max(10),
+  brand:         z.string().min(1),
+  model:         z.string().min(1),
+  year:          z.number().int().min(1950).max(new Date().getFullYear() + 1).optional(),
+  color:         z.string().optional(),
 });
 
+const clientDataSchema = z.object({
+  full_name: z.string().min(1),
+  phone:     z.string().min(7),
+  email:     z.string().email().optional(),
+});
+
+const createSchema = z.object({
+  vehicle_id:         z.string().uuid().optional(),
+  vehicle_data:       vehicleDataSchema.optional(),
+  client_id:          z.string().uuid().optional(),
+  client_data:        clientDataSchema.optional(),
+  complaint:          z.string().min(5, "Describa la falla con al menos 5 caracteres."),
+  mileage_in:         z.number().int().positive().optional(),
+  estimated_delivery: z.string().datetime({ offset: true }).optional(),
+  assigned_to:        z.string().uuid().optional(),
+  internal_notes:     z.string().optional(),
+}).refine(
+  (d) => d.vehicle_id || d.vehicle_data,
+  { message: "Proporciona vehicle_id o vehicle_data." }
+).refine(
+  (d) => d.client_id || d.client_data,
+  { message: "Proporciona client_id o client_data." }
+);
+
 const transitionSchema = z.object({
-  status:         z.enum(WORK_ORDER_STATUSES as [WorkOrderStatus, ...WorkOrderStatus[]]),
+  status:         z.enum([...WORK_ORDER_STATUSES] as [WorkOrderStatus, ...WorkOrderStatus[]]),
   diagnosis:      z.string().optional(),
   internal_notes: z.string().optional(),
   mileage_out:    z.number().int().positive().optional(),
@@ -25,7 +62,7 @@ const transitionSchema = z.object({
 
 const listQuerySchema = z.object({
   status: z
-    .enum(WORK_ORDER_STATUSES as [WorkOrderStatus, ...WorkOrderStatus[]])
+    .enum([...WORK_ORDER_STATUSES] as [WorkOrderStatus, ...WorkOrderStatus[]])
     .optional(),
   limit:  z.coerce.number().int().min(1).max(100).default(20),
   offset: z.coerce.number().int().min(0).default(0),
@@ -126,6 +163,25 @@ export const workOrderController = {
         req.params.id
       );
       res.json({ tracking_url: url, qr_base64: base64 });
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  // POST /work-orders/:id/quotes — save AI-generated quote draft
+  async createQuote(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const raw   = createQuoteSchema.parse(req.body);
+      const dto: CreateQuoteDTO = {
+        notes: raw.notes,
+        items: (raw.items as unknown as CreateQuoteItemDTO[]),
+      };
+      const quote = await workOrderService.createQuote(
+        req.user.tenant_id,
+        req.params.id,
+        dto,
+      );
+      res.status(201).json(quote);
     } catch (err) {
       next(err);
     }

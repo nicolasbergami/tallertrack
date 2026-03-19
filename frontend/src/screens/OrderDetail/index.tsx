@@ -1,17 +1,24 @@
 import { useState } from "react";
 import { useParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppShell } from "../../components/layout/AppShell";
 import { StatusBadge } from "../../components/ui/StatusBadge";
 import { BigButton } from "../../components/ui/BigButton";
 import { StatusTimeline } from "./StatusTimeline";
 import { ActionBar } from "./ActionBar";
+import { AiQuoteModal } from "./AiQuoteModal";
 import { workOrdersApi } from "../../api/work-orders.api";
 import { getStatusConfig, formatElapsed } from "../../config/status.config";
+import { IconWrench, IconQr, IconDownload, IconPhone } from "../../components/ui/Icons";
+
+// Statuses where a mechanic can dictate a quote
+const AI_QUOTE_STATUSES = ["diagnosing", "awaiting_parts", "in_progress"] as const;
 
 export function OrderDetail() {
-  const { id } = useParams<{ id: string }>();
-  const [qrModal, setQrModal] = useState(false);
+  const { id }      = useParams<{ id: string }>();
+  const qc          = useQueryClient();
+  const [qrModal,   setQrModal]   = useState(false);
+  const [aiModal,   setAiModal]   = useState(false);
 
   const { data: order, isLoading, error } = useQuery({
     queryKey:    ["work-order", id],
@@ -53,14 +60,28 @@ export function OrderDetail() {
   const cfg = getStatusConfig(order.status);
   const elapsed = formatElapsed(order.received_at);
 
+  const canDictateQuote = (AI_QUOTE_STATUSES as readonly string[]).includes(order.status);
+
   return (
     <AppShell
       title={order.order_number}
       backTo="/"
       action={
-        <BigButton size="md" variant="secondary" onClick={() => setQrModal(true)} icon={<span>⬜</span>}>
-          QR
-        </BigButton>
+        <div className="flex items-center gap-2">
+          {canDictateQuote && (
+            <button
+              onClick={() => setAiModal(true)}
+              className="h-9 px-3 rounded-xl bg-brand/15 hover:bg-brand/25 border border-brand/30
+                         text-brand font-semibold text-xs flex items-center gap-1.5 transition-colors"
+            >
+              <IconWrench className="w-3.5 h-3.5" />
+              Presupuesto IA
+            </button>
+          )}
+          <BigButton size="md" variant="secondary" onClick={() => setQrModal(true)} icon={<IconQr className="w-4 h-4" />}>
+            QR
+          </BigButton>
+        </div>
       }
     >
       <div className="flex flex-col pb-4">
@@ -88,13 +109,14 @@ export function OrderDetail() {
               {order.vehicle_brand} {order.vehicle_model}
             </p>
             <div className="flex items-center gap-2 text-sm text-slate-400 flex-wrap">
-              <span>👤 {order.client_name}</span>
+              <span>{order.client_name}</span>
               {order.client_phone && (
                 <a
                   href={`tel:${order.client_phone}`}
-                  className="flex items-center gap-1 text-brand hover:text-brand-hover font-medium"
+                  className="flex items-center gap-1.5 text-brand hover:text-brand-hover font-medium"
                 >
-                  📞 {order.client_phone}
+                  <IconPhone className="w-3.5 h-3.5" />
+                  {order.client_phone}
                 </a>
               )}
             </div>
@@ -113,7 +135,7 @@ export function OrderDetail() {
         {order.diagnosis && (
           <section className="mx-4 mt-3 bg-sky-950/40 rounded-2xl p-4 border border-sky-800/50">
             <h3 className="text-xs font-semibold text-sky-500 uppercase tracking-wide mb-2">
-              🔍 Diagnóstico
+              Diagnóstico
             </h3>
             <p className="text-sky-100 text-base leading-relaxed">{order.diagnosis}</p>
           </section>
@@ -123,7 +145,7 @@ export function OrderDetail() {
         {order.internal_notes && (
           <section className="mx-4 mt-3 bg-amber-950/30 rounded-2xl p-4 border border-amber-800/40">
             <h3 className="text-xs font-semibold text-amber-500 uppercase tracking-wide mb-2">
-              🔒 Notas internas
+              Notas internas
             </h3>
             <p className="text-amber-100/80 text-sm leading-relaxed">{order.internal_notes}</p>
           </section>
@@ -155,6 +177,19 @@ export function OrderDetail() {
         {/* ── Action bar ── */}
         <ActionBar order={order} />
       </div>
+
+      {/* ── AI Quote Modal ── */}
+      {aiModal && (
+        <AiQuoteModal
+          workOrderId={order.id}
+          complaint={order.complaint}
+          onClose={() => setAiModal(false)}
+          onSaved={() => {
+            setAiModal(false);
+            qc.invalidateQueries({ queryKey: ["work-order", id] });
+          }}
+        />
+      )}
 
       {/* ── QR Modal ── */}
       {qrModal && (
@@ -195,7 +230,8 @@ export function OrderDetail() {
                   className="w-full h-touch flex items-center justify-center gap-2 rounded-xl
                              bg-brand text-white font-bold text-base touch-feedback"
                 >
-                  ⬇️ Descargar PNG
+                  <IconDownload className="w-4 h-4" />
+                  Descargar PNG
                 </a>
               )}
               <BigButton variant="ghost" size="md" fullWidth onClick={() => setQrModal(false)}>

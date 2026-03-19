@@ -42,18 +42,20 @@ export function QuoteSection({ quote, tenantSlug, orderNumber, queryKey }: Props
   const isActionable = quote.status === "sent";
   const isApproved   = quote.status === "approved";
   const isRejected   = quote.status === "rejected";
+  const isExpired    = quote.status === "expired";
 
   return (
     <div className={`
       rounded-2xl border overflow-hidden transition-all
       ${isApproved ? "border-green-200 bg-green-50"
         : isRejected ? "border-red-200 bg-red-50"
+        : isExpired  ? "border-gray-200 bg-gray-50"
         : "border-orange-200 bg-white shadow-sm"}
     `}>
       {/* ── Header ── */}
       <div className={`
         flex items-center justify-between gap-3 px-5 py-4
-        ${isApproved ? "bg-green-100" : isRejected ? "bg-red-100" : "bg-orange-50"}
+        ${isApproved ? "bg-green-100" : isRejected ? "bg-red-100" : isExpired ? "bg-gray-100" : "bg-orange-50"}
       `}>
         <div>
           <p className="font-bold text-gray-800">Presupuesto {quote.quote_number}</p>
@@ -78,6 +80,11 @@ export function QuoteSection({ quote, tenantSlug, orderNumber, queryKey }: Props
         {isActionable && (
           <span className="bg-orange-100 text-orange-700 text-xs font-bold px-3 py-1.5 rounded-full border border-orange-300">
             Pendiente tu aprobación
+          </span>
+        )}
+        {isExpired && (
+          <span className="bg-gray-100 text-gray-500 text-xs font-bold px-3 py-1.5 rounded-full border border-gray-300">
+            Expirado
           </span>
         )}
       </div>
@@ -220,6 +227,9 @@ export function QuoteSection({ quote, tenantSlug, orderNumber, queryKey }: Props
                     Tu aprobación quedará registrada con fecha, hora y dirección IP.
                   </p>
                 </div>
+                {respondMutation.error && (
+                  <p className="text-sm text-red-500 text-center">{(respondMutation.error as Error).message}</p>
+                )}
                 <div className="flex flex-col gap-2">
                   <button
                     onClick={() => respondMutation.mutate({ action: "approve" })}
@@ -235,7 +245,7 @@ export function QuoteSection({ quote, tenantSlug, orderNumber, queryKey }: Props
                     Sí, apruebo el presupuesto
                   </button>
                   <button
-                    onClick={() => setModal({ open: false })}
+                    onClick={() => { setModal({ open: false }); respondMutation.reset(); }}
                     disabled={respondMutation.isPending}
                     className="h-12 w-full rounded-xl text-gray-500 hover:bg-gray-100 font-semibold transition-all"
                   >
@@ -280,7 +290,7 @@ export function QuoteSection({ quote, tenantSlug, orderNumber, queryKey }: Props
                     {respondMutation.isPending ? "Enviando..." : "Confirmar rechazo"}
                   </button>
                   <button
-                    onClick={() => setModal({ open: false })}
+                    onClick={() => { setModal({ open: false }); setReason(""); respondMutation.reset(); }}
                     disabled={respondMutation.isPending}
                     className="h-12 w-full rounded-xl text-gray-500 hover:bg-gray-100 font-semibold transition-all"
                   >

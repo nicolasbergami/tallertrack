@@ -66,4 +66,16 @@ router.get("/:id/qr", workOrderController.getQrPng);
  */
 router.get("/:id/qr.json", workOrderController.getQrJson);
 
+/**
+ * @route   POST /api/v1/work-orders/:id/quotes
+ * @desc    Create a quote draft (typically from AI extraction)
+ * @body    { items: QuoteItem[], notes?: string }
+ * @access  owner, admin, mechanic
+ */
+router.post(
+  "/:id/quotes",
+  authorize("owner", "admin", "mechanic"),
+  workOrderController.createQuote,
+);
+
 export default router;

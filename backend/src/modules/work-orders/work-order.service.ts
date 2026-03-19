@@ -11,6 +11,8 @@ import {
   WorkOrderStatus,
   CreateWorkOrderDTO,
   TransitionWorkOrderDTO,
+  CreateQuoteDTO,
+  QuoteWithItems,
 } from "./work-order.types";
 import { env } from "../../config/env";
 import { createHttpError } from "../../middleware/error.middleware";
@@ -58,7 +60,45 @@ export const workOrderService = {
     requestMeta: { ip?: string; userAgent?: string }
   ): Promise<WorkOrder> {
     return withTenantTransaction(tenantId, async (client) => {
-      const workOrder = await workOrderRepository.create(client, tenantId, userId, dto);
+
+      // ── 1. Resolve (or create) client ──────────────────────────────────────
+      let clientId = dto.client_id;
+      if (!clientId) {
+        const cd = dto.client_data!;
+        const { rows: clientRows } = await client.query<{ id: string }>(
+          `INSERT INTO clients (tenant_id, full_name, phone, email, created_by)
+           VALUES ($1, $2, $3, $4, $5)
+           RETURNING id`,
+          [tenantId, cd.full_name, cd.phone, cd.email ?? null, userId]
+        );
+        clientId = clientRows[0].id;
+      }
+
+      // ── 2. Resolve (or upsert) vehicle ─────────────────────────────────────
+      let vehicleId = dto.vehicle_id;
+      if (!vehicleId) {
+        const vd = dto.vehicle_data!;
+        const plate = vd.license_plate.toUpperCase().replace(/\s/g, "");
+        const { rows: vehicleRows } = await client.query<{ id: string }>(
+          `INSERT INTO vehicles (tenant_id, client_id, license_plate, brand, model, year, color)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
+           ON CONFLICT (tenant_id, license_plate) DO UPDATE
+             SET brand      = EXCLUDED.brand,
+                 model      = EXCLUDED.model,
+                 year       = COALESCE(EXCLUDED.year,  vehicles.year),
+                 color      = COALESCE(EXCLUDED.color, vehicles.color),
+                 updated_at = NOW()
+           RETURNING id`,
+          [tenantId, clientId, plate, vd.brand, vd.model, vd.year ?? null, vd.color ?? null]
+        );
+        vehicleId = vehicleRows[0].id;
+      }
+
+      const workOrder = await workOrderRepository.create(client, tenantId, userId, {
+        ...dto,
+        vehicle_id: vehicleId!,
+        client_id:  clientId!,
+      });
 
       await historyLogRepository.create(client, {
         tenant_id:    tenantId,
@@ -147,6 +187,22 @@ export const workOrderService = {
     const workOrder = await this.getById(tenantId, workOrderId);
     const transitions = WorkOrderStateMachine.getAvailableTransitions(workOrder.status);
     return { current: workOrder.status, available: transitions };
+  },
+
+  // -------------------------------------------------------------------------
+  // Create a quote (draft) for a work order from AI-generated items
+  // -------------------------------------------------------------------------
+  async createQuote(
+    tenantId: string,
+    workOrderId: string,
+    dto: CreateQuoteDTO,
+  ): Promise<QuoteWithItems> {
+    // Verify the work order exists and belongs to this tenant
+    await this.getById(tenantId, workOrderId);
+
+    return withTenantTransaction(tenantId, (client) =>
+      workOrderRepository.createQuote(client, tenantId, workOrderId, dto),
+    );
   },
 
   // -------------------------------------------------------------------------

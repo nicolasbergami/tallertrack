@@ -1,0 +1,15 @@
+{
+  "name": "tallertrack",
+  "version": "1.0.0",
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "npm run build:frontend && npm run build:backend",
+    "build:frontend": "cd frontend && npm ci && npm run build",
+    "build:backend":  "cd backend  && npm ci && npm run build",
+    "start": "node backend/dist/server.js",
+    "dev":   "concurrently \"cd backend && npm run dev\" \"cd frontend && npm run dev\""
+  }
+}

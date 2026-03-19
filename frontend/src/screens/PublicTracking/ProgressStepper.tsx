@@ -32,6 +32,12 @@ interface Props {
   status: string;
 }
 
+// When the DB status is awaiting_parts, show a sub-label under the repair step
+const REPAIR_SUBLABEL: Partial<Record<string, string>> = {
+  awaiting_parts: "Esperando repuestos",
+  in_progress:    "Trabajando",
+};
+
 export function ProgressStepper({ status }: Props) {
   const isCancelled = status === "cancelled";
   const currentKey  = STATUS_TO_STEP[status] ?? "received";
@@ -85,6 +91,11 @@ export function ProgressStepper({ status }: Props) {
                 ${active ? "text-orange-600" : done ? "text-gray-500" : "text-gray-300"}
               `}>
                 {step.label}
+                {active && step.key === "repair" && REPAIR_SUBLABEL[status] && (
+                  <span className="block text-[10px] font-normal text-orange-400 mt-0.5">
+                    {REPAIR_SUBLABEL[status]}
+                  </span>
+                )}
               </span>
               {/* "Actual" pulse */}
               {active && (
@@ -129,6 +140,9 @@ export function ProgressStepper({ status }: Props) {
                   {step.label}
                   {active && <span className="ml-2 inline-block w-2 h-2 rounded-full bg-orange-400 animate-pulse" />}
                 </p>
+                {active && step.key === "repair" && REPAIR_SUBLABEL[status] && (
+                  <p className="text-xs text-orange-400 mt-1">{REPAIR_SUBLABEL[status]}</p>
+                )}
               </div>
             </div>
           );

@@ -1,4 +1,4 @@
-import { WorkOrderStatus, STATUS_LABELS } from "../../modules/work-orders/work-order.types";
+import { WorkOrderStatus } from "../../modules/work-orders/work-order.types";
 
 export interface MessageContext {
   clientName: string;

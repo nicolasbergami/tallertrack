@@ -68,8 +68,9 @@ export const authService = {
       email:     user.email,
     };
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const token = jwt.sign(payload, env.JWT_SECRET, {
-      expiresIn: env.JWT_EXPIRES_IN,
+      expiresIn: env.JWT_EXPIRES_IN as any,
     });
 
     return {

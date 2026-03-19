@@ -1,6 +1,6 @@
 import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { publicTrackingApi } from "../../api/public-tracking.api";
+import { publicTrackingApi, PublicHistoryEntry } from "../../api/public-tracking.api";
 import { ProgressStepper } from "./ProgressStepper";
 import { QuoteSection } from "./QuoteSection";
 
@@ -268,7 +268,7 @@ const STATUS_LABELS_ES: Record<string, string> = {
   delivered: "Entregado", cancelled: "Cancelado",
 };
 
-function HistoryRow({ entry }: { entry: ReturnType<typeof publicTrackingApi.getOrder> extends Promise<infer T> ? T extends { history: Array<infer H> } ? H : never : never }) {
+function HistoryRow({ entry }: { entry: PublicHistoryEntry }) {
   const label = ACTION_LABELS[entry.action] ?? entry.action;
   const isQuoteAction = entry.action.includes("quote");
 

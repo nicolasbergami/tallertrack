@@ -18,6 +18,9 @@ const envSchema = z.object({
   WHATSAPP_PHONE_NUMBER_ID: z.string().optional(),
   WHATSAPP_ACCESS_TOKEN: z.string().optional(),
   WHATSAPP_TEMPLATE_NAMESPACE: z.string().optional(),
+
+  // AI features (Anthropic Claude)
+  ANTHROPIC_API_KEY: z.string().optional().default(""),
 });
 
 const parsed = envSchema.safeParse(process.env);
