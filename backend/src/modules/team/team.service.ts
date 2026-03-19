@@ -1,5 +1,5 @@
 import bcrypt from "bcrypt";
-import { pool, withTenantContext } from "../../config/database";
+import { withTenantContext } from "../../config/database";
 import { createHttpError } from "../../middleware/error.middleware";
 import {
   CreateMemberDTO,
@@ -93,7 +93,7 @@ export const teamService = {
   async update(
     tenantId:     string,
     memberId:     string,
-    requesterId:  string,
+    _requesterId: string,
     dto:          UpdateMemberDTO,
   ): Promise<TeamMember> {
     return withTenantContext(tenantId, async (client) => {
