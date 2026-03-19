@@ -1,9 +1,5 @@
-import {
-  initAuthCreds,
-  BufferJSON,
-  makeCacheableSignalKeyStore,
-  type AuthenticationState,
-} from "@whiskeysockets/baileys";
+// `import type` generates ZERO runtime code — safe in CJS modules
+import type { AuthenticationState } from "@whiskeysockets/baileys";
 import { pool } from "../../config/database";
 
 // Minimal silent logger compatible with Baileys / pino interface
@@ -20,11 +16,19 @@ const silentLogger = {
 
 // ---------------------------------------------------------------------------
 // PostgreSQL-backed Baileys AuthenticationState
+// Uses dynamic import() at runtime to avoid ESM/CJS conflict with Baileys.
 // ---------------------------------------------------------------------------
 export async function usePostgresAuthState(tenantId: string): Promise<{
   state:     AuthenticationState;
   saveCreds: () => Promise<void>;
 }> {
+  // Baileys is ESM-only: dynamic import works in both CJS and ESM outputs
+  const {
+    initAuthCreds,
+    BufferJSON,
+    makeCacheableSignalKeyStore,
+  } = await import("@whiskeysockets/baileys");
+
   // ── Load existing credentials ──────────────────────────────────────────────
   const { rows } = await pool.query<{ creds: unknown }>(
     `SELECT creds FROM whatsapp_sessions WHERE tenant_id = $1`,

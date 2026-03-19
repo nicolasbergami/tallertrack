@@ -1,8 +1,4 @@
 import EventEmitter from "events";
-import makeWASocket, {
-  DisconnectReason,
-  fetchLatestBaileysVersion,
-} from "@whiskeysockets/baileys";
 import { Boom } from "@hapi/boom";
 import { pool } from "../../config/database";
 import { usePostgresAuthState } from "./db-auth-state";
@@ -13,10 +9,11 @@ import { usePostgresAuthState } from "./db-auth-state";
 export type SessionStatus = "connecting" | "qr" | "connected" | "disconnected";
 
 interface ManagedSession {
-  socket:     ReturnType<typeof makeWASocket>;
-  qrEmitter:  EventEmitter;
-  status:     SessionStatus;
-  phone?:     string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  socket:    any;          // WASocket — typed as any; loaded via dynamic import
+  qrEmitter: EventEmitter;
+  status:    SessionStatus;
+  phone?:    string;
 }
 
 // ---------------------------------------------------------------------------
@@ -45,7 +42,6 @@ export const sessionManager = {
     if (!session || session.status !== "connected") {
       throw new Error(`No active WhatsApp session for tenant ${tenantId}`);
     }
-    // Normalize to JID: strip non-digits, append @s.whatsapp.net
     const jid = `${phone.replace(/\D/g, "")}@s.whatsapp.net`;
     await session.socket.sendMessage(jid, { text });
   },
@@ -57,7 +53,6 @@ export const sessionManager = {
       return existing.qrEmitter;
     }
     const qrEmitter = new EventEmitter();
-    // Fire-and-forget — errors are emitted on qrEmitter
     this._connect(tenantId, qrEmitter).catch((err) => {
       console.error(`[WhatsApp] Session start error for tenant ${tenantId}:`, err);
       qrEmitter.emit("error", err);
@@ -73,8 +68,7 @@ export const sessionManager = {
       sessions.delete(tenantId);
     }
     await pool.query(
-      `UPDATE whatsapp_sessions SET status = 'disconnected', updated_at = NOW()
-        WHERE tenant_id = $1`,
+      `UPDATE whatsapp_sessions SET status = 'disconnected', updated_at = NOW() WHERE tenant_id = $1`,
       [tenantId]
     );
     await pool.query(
@@ -104,32 +98,39 @@ export const sessionManager = {
 
   // ── Internal: create and wire a WASocket for a tenant ────────────────────
   async _connect(tenantId: string, qrEmitter: EventEmitter): Promise<void> {
+    // Dynamic import avoids ESM/CJS conflict — Baileys is ESM-only
+    const {
+      default: makeWASocket,
+      DisconnectReason,
+      fetchLatestBaileysVersion,
+    } = await import("@whiskeysockets/baileys");
+
     const { state, saveCreds } = await usePostgresAuthState(tenantId);
     const { version } = await fetchLatestBaileysVersion();
 
     const socket = makeWASocket({
       version,
-      auth:               state,
-      printQRInTerminal:  false,
-      // Identify as Chrome browser to avoid mobile-only restrictions
-      browser:            ["TallerTrack", "Chrome", "1.0.0"],
-      // Reduce noise in our logs
+      auth:              state,
+      printQRInTerminal: false,
+      browser:           ["TallerTrack", "Chrome", "1.0.0"],
       logger: {
-        level: "silent",
-        child: () => ({} as never),
-        trace: () => {}, debug: () => {}, info: () => {},
-        warn:  () => {}, error: () => {}, fatal: () => {},
+        level:  "silent",
+        child:  () => ({} as never),
+        trace:  () => {}, debug: () => {}, info: () => {},
+        warn:   () => {}, error: () => {}, fatal: () => {},
       } as never,
     });
 
     const session: ManagedSession = { socket, qrEmitter, status: "connecting" };
     sessions.set(tenantId, session);
 
-    // ── Persist credentials whenever Baileys updates them ─────────────────
     socket.ev.on("creds.update", saveCreds);
 
-    // ── Handle connection lifecycle ────────────────────────────────────────
-    socket.ev.on("connection.update", async (update) => {
+    socket.ev.on("connection.update", async (update: {
+      connection?: string;
+      lastDisconnect?: { error?: Error };
+      qr?: string;
+    }) => {
       const { connection, lastDisconnect, qr } = update;
 
       if (qr) {
@@ -139,8 +140,7 @@ export const sessionManager = {
 
       if (connection === "open") {
         session.status = "connected";
-        // socket.user.id format: "5491112345678:0@s.whatsapp.net"
-        session.phone = socket.user?.id?.split(":")[0] ?? undefined;
+        session.phone  = socket.user?.id?.split(":")[0] ?? undefined;
 
         await pool.query(
           `INSERT INTO whatsapp_sessions (tenant_id, creds, status, phone)
@@ -162,7 +162,6 @@ export const sessionManager = {
         sessions.delete(tenantId);
 
         if (!loggedOut) {
-          // Transient error — reconnect after a short delay
           console.log(`[WhatsApp] Tenant ${tenantId} disconnected (code ${statusCode}), reconnecting…`);
           await new Promise((r) => setTimeout(r, 5_000));
           const newEmitter = new EventEmitter();
@@ -170,10 +169,8 @@ export const sessionManager = {
             console.error(`[WhatsApp] Reconnect error for tenant ${tenantId}:`, err)
           );
         } else {
-          // User explicitly logged out — mark as disconnected and clean up
           await pool.query(
-            `UPDATE whatsapp_sessions SET status = 'disconnected', updated_at = NOW()
-              WHERE tenant_id = $1`,
+            `UPDATE whatsapp_sessions SET status = 'disconnected', updated_at = NOW() WHERE tenant_id = $1`,
             [tenantId]
           );
           qrEmitter.emit("disconnected", { reason: "logged_out" });
