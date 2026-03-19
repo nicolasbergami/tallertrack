@@ -140,6 +140,20 @@ export const sessionManager = {
     const session: ManagedSession = { socket, qrEmitter, status: "connecting" };
     sessions.set(tenantId, session);
 
+    let qrEverEmitted = false;
+
+    // Safety timeout: if WhatsApp never sends a QR or open/close event within
+    // 30 s, notify the frontend so the user can retry instead of waiting forever.
+    const noResponseTimeout = setTimeout(() => {
+      if (!qrEverEmitted && session.status !== "connected") {
+        console.warn(`[WhatsApp] No response from server for tenant ${tenantId} — aborting`);
+        session.status = "disconnected";
+        sessions.delete(tenantId);
+        try { socket.end(undefined); } catch { /* ignore */ }
+        qrEmitter.emit("error", new Error("WhatsApp no respondió. Verificá la conexión del servidor y reintentá."));
+      }
+    }, 30_000);
+
     socket.ev.on("creds.update", saveCreds);
 
     socket.ev.on("connection.update", async (update: {
@@ -150,11 +164,14 @@ export const sessionManager = {
       const { connection, lastDisconnect, qr } = update;
 
       if (qr) {
-        session.status = "qr";
+        clearTimeout(noResponseTimeout);
+        session.status   = "qr";
+        qrEverEmitted    = true;
         qrEmitter.emit("qr", qr);
       }
 
       if (connection === "open") {
+        clearTimeout(noResponseTimeout);
         session.status = "connected";
         session.phone  = socket.user?.id?.split(":")[0] ?? undefined;
 
@@ -171,6 +188,7 @@ export const sessionManager = {
       }
 
       if (connection === "close") {
+        clearTimeout(noResponseTimeout);
         const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
         const loggedOut  = statusCode === DisconnectReason.loggedOut;
 
@@ -178,12 +196,21 @@ export const sessionManager = {
         sessions.delete(tenantId);
 
         if (!loggedOut) {
-          console.log(`[WhatsApp] Tenant ${tenantId} disconnected (code ${statusCode}), reconnecting…`);
-          await new Promise((r) => setTimeout(r, 5_000));
-          const newEmitter = new EventEmitter();
-          this._connect(tenantId, newEmitter).catch((err) =>
-            console.error(`[WhatsApp] Reconnect error for tenant ${tenantId}:`, err)
-          );
+          if (!qrEverEmitted) {
+            // Connection failed before the QR was ever shown — tell the frontend
+            // so the user can retry. Do NOT reconnect silently with a new emitter
+            // (the SSE is bound to this qrEmitter and would never see those events).
+            console.warn(`[WhatsApp] Tenant ${tenantId} closed before QR (code ${statusCode})`);
+            qrEmitter.emit("error", new Error(`WhatsApp rechazó la conexión (código ${statusCode ?? "desconocido"}). Reintentá en unos segundos.`));
+          } else {
+            // Had an active session — reconnect in background (user doesn't need to do anything)
+            console.log(`[WhatsApp] Tenant ${tenantId} disconnected (code ${statusCode}), reconnecting…`);
+            await new Promise((r) => setTimeout(r, 5_000));
+            const newEmitter = new EventEmitter();
+            this._connect(tenantId, newEmitter).catch((err) =>
+              console.error(`[WhatsApp] Reconnect error for tenant ${tenantId}:`, err)
+            );
+          }
         } else {
           await pool.query(
             `UPDATE whatsapp_sessions SET status = 'disconnected', updated_at = NOW() WHERE tenant_id = $1`,
