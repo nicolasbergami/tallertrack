@@ -98,12 +98,15 @@ export const sessionManager = {
 
   // ── Internal: create and wire a WASocket for a tenant ────────────────────
   async _connect(tenantId: string, qrEmitter: EventEmitter): Promise<void> {
-    // Dynamic import avoids ESM/CJS conflict — Baileys is ESM-only
+    // new Function() prevents TypeScript from compiling import() → require()
+    // when module target is CommonJS.  Node.js evaluates the native import()
+    // at runtime, which correctly handles ESM-only packages like Baileys.
     const {
       default: makeWASocket,
       DisconnectReason,
       fetchLatestBaileysVersion,
-    } = await import("@whiskeysockets/baileys");
+    // eslint-disable-next-line @typescript-eslint/no-implied-eval
+    } = await (new Function('return import("@whiskeysockets/baileys")')() as Promise<typeof import("@whiskeysockets/baileys")>);
 
     const { state, saveCreds } = await usePostgresAuthState(tenantId);
     const { version } = await fetchLatestBaileysVersion();

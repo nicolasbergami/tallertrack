@@ -22,12 +22,14 @@ export async function usePostgresAuthState(tenantId: string): Promise<{
   state:     AuthenticationState;
   saveCreds: () => Promise<void>;
 }> {
-  // Baileys is ESM-only: dynamic import works in both CJS and ESM outputs
+  // new Function() prevents TypeScript from compiling import() → require()
+  // when module target is CommonJS.
   const {
     initAuthCreds,
     BufferJSON,
     makeCacheableSignalKeyStore,
-  } = await import("@whiskeysockets/baileys");
+  // eslint-disable-next-line @typescript-eslint/no-implied-eval
+  } = await (new Function('return import("@whiskeysockets/baileys")')() as Promise<typeof import("@whiskeysockets/baileys")>);
 
   // ── Load existing credentials ──────────────────────────────────────────────
   const { rows } = await pool.query<{ creds: unknown }>(
