@@ -8,6 +8,7 @@ import authRoutes       from "./modules/auth/auth.routes";
 import workOrderRoutes from "./modules/work-orders/work-order.routes";
 import publicRoutes    from "./modules/public/public.routes";
 import aiRoutes        from "./modules/ai/ai.routes";
+import onboardingRoutes from "./modules/onboarding/onboarding.routes";
 import { env } from "./config/env";
 
 const app = express();
@@ -54,6 +55,7 @@ app.use("/api/v1/auth",        authRoutes);
 app.use("/api/v1/work-orders", workOrderRoutes);
 app.use("/api/v1/public",      publicRoutes);
 app.use("/api/v1/ai",          aiRoutes);
+app.use("/api/v1/onboarding", onboardingRoutes); // public — no auth
 
 // ---------------------------------------------------------------------------
 // Serve frontend static files in production
