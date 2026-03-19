@@ -32,4 +32,40 @@
   .touch-feedback {
     @apply transition-transform duration-75 active:scale-95;
   }
+
+  /*
+   * Workshop atmosphere background
+   * Subtle grid + defocused light orbs — applied to NewOrder content area
+   */
+  .workshop-bg {
+    background-color: #0C1120;
+    background-image:
+      /* Defocused orange orb — top right */
+      radial-gradient(ellipse 280px 180px at 90% 8%, rgba(249,115,22,0.05), transparent),
+      /* Defocused blue orb — bottom left */
+      radial-gradient(ellipse 200px 280px at 10% 80%, rgba(59,130,246,0.04), transparent),
+      /* Precision grid lines */
+      linear-gradient(rgba(71,85,105,0.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(71,85,105,0.05) 1px, transparent 1px);
+    background-size: 100% 100%, 100% 100%, 36px 36px, 36px 36px;
+  }
+
+  /* Metallic nav orb — used for active bottom nav item */
+  .metal-orb-active {
+    background: linear-gradient(145deg, #374151 0%, #1F2937 60%, #374151 100%);
+    box-shadow:
+      0 2px 8px rgba(0,0,0,0.5),
+      inset 0 1px 0 rgba(255,255,255,0.08),
+      inset 0 -1px 0 rgba(0,0,0,0.3);
+    border: 1px solid rgba(249,115,22,0.3);
+  }
+
+  .metal-orb-active-highlight {
+    background: linear-gradient(145deg, #2D2010 0%, #1A1208 60%, #2D2010 100%);
+    box-shadow:
+      0 2px 12px rgba(249,115,22,0.3),
+      inset 0 1px 0 rgba(255,255,255,0.06),
+      inset 0 -1px 0 rgba(0,0,0,0.3);
+    border: 1px solid rgba(249,115,22,0.5);
+  }
 }

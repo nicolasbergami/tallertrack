@@ -42,17 +42,32 @@ export default {
       },
       animation: {
         "pulse-brand": "pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite",
-        "slide-up": "slideUp 0.2s ease-out",
-        "fade-in": "fadeIn 0.15s ease-out",
+        "slide-up":    "slideUp 0.2s ease-out",
+        "fade-in":     "fadeIn 0.15s ease-out",
+        "laser-scan":  "laserScan 1s ease-in-out infinite",
+        "orb-pulse":   "orbPulse 2s ease-out infinite",
+        "fill-in":     "fillIn 0.3s ease-out",
       },
       keyframes: {
         slideUp: {
-          "0%": { transform: "translateY(8px)", opacity: "0" },
-          "100%": { transform: "translateY(0)", opacity: "1" },
+          "0%":   { transform: "translateY(8px)", opacity: "0" },
+          "100%": { transform: "translateY(0)",   opacity: "1" },
         },
         fadeIn: {
-          "0%": { opacity: "0" },
+          "0%":   { opacity: "0" },
           "100%": { opacity: "1" },
+        },
+        laserScan: {
+          "0%":   { transform: "translateX(-100%)" },
+          "100%": { transform: "translateX(500%)" },
+        },
+        orbPulse: {
+          "0%, 100%": { transform: "scale(1)",   opacity: "1" },
+          "50%":      { transform: "scale(1.6)", opacity: "0" },
+        },
+        fillIn: {
+          "0%":   { opacity: "0", transform: "translateY(-3px)" },
+          "100%": { opacity: "1", transform: "translateY(0)" },
         },
       },
     },

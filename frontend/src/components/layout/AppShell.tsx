@@ -88,12 +88,39 @@ function NavItem({ to, Icon, label, highlight }: NavItemProps) {
     >
       {({ isActive }) => (
         <>
-          <span className={`
-            flex items-center justify-center w-8 h-8 rounded-xl transition-all duration-150
-            ${isActive ? (highlight ? "bg-brand/15" : "bg-surface-raised") : ""}
-          `}>
+          {/* Icon container — metallic orb when active */}
+          <span
+            className="flex items-center justify-center w-8 h-8 rounded-xl transition-all duration-200"
+            style={isActive ? (
+              highlight
+                ? {
+                    background: "linear-gradient(145deg, #2D1F08 0%, #1A1205 60%, #2D1F08 100%)",
+                    boxShadow: "0 2px 12px rgba(249,115,22,0.3), inset 0 1px 0 rgba(255,255,255,0.06), inset 0 -1px 0 rgba(0,0,0,0.3)",
+                    border: "1px solid rgba(249,115,22,0.45)",
+                  }
+                : {
+                    background: "linear-gradient(145deg, #2D3748 0%, #1A202C 60%, #2D3748 100%)",
+                    boxShadow: "0 2px 8px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.07), inset 0 -1px 0 rgba(0,0,0,0.3)",
+                    border: "1px solid rgba(71,85,105,0.4)",
+                  }
+            ) : {}}
+          >
             <Icon className="w-[1.125rem] h-[1.125rem]" />
+
+            {/* Orange pulse dot — active + highlight only */}
+            {isActive && highlight && (
+              <span
+                className="absolute w-1 h-1 rounded-full animate-pulse"
+                style={{
+                  background: "#F97316",
+                  boxShadow: "0 0 4px #F97316",
+                  marginTop: "18px",
+                  marginLeft: "18px",
+                }}
+              />
+            )}
           </span>
+
           <span>{label}</span>
         </>
       )}

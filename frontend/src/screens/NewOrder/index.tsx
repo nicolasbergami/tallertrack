@@ -74,10 +74,13 @@ export function NewOrder() {
     <AppShell title="Nueva orden" backTo="/">
 
       {/* Step indicator — sticky below header */}
-      <div className="sticky top-[3.75rem] z-30 bg-surface/95 backdrop-blur
+      <div className="sticky top-[3.75rem] z-30 bg-surface/90 backdrop-blur
                       border-b border-surface-border px-6 py-4">
         <StepIndicator steps={STEPS} current={step} />
       </div>
+
+      {/* Workshop atmosphere wraps all step content */}
+      <div className="workshop-bg min-h-full">
 
       {/* Error banner */}
       {createMutation.error && (
@@ -194,6 +197,8 @@ export function NewOrder() {
           </button>
         </div>
       )}
+
+      </div>{/* /workshop-bg */}
     </AppShell>
   );
 }
