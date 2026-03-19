@@ -3,11 +3,11 @@ import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../../store/auth.store";
 import { IconEye, IconEyeOff } from "../../components/ui/Icons";
 
-async function loginRequest(email: string, password: string, tenantSlug: string) {
+async function loginRequest(email: string, password: string) {
   const res = await fetch("/api/v1/auth/login", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password, tenant_slug: tenantSlug }),
+    body: JSON.stringify({ email, password }),
   });
   const body = await res.json();
   if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
@@ -21,19 +21,18 @@ export function Login() {
   const navigate   = useNavigate();
   const setAuth    = useAuthStore((s) => s.setAuth);
 
-  const [email,      setEmail]      = useState("");
-  const [password,   setPassword]   = useState("");
-  const [tenantSlug, setTenantSlug] = useState("taller-demo");
-  const [error,      setError]      = useState<string | null>(null);
-  const [loading,    setLoading]    = useState(false);
-  const [showPass,   setShowPass]   = useState(false);
+  const [email,    setEmail]    = useState("");
+  const [password, setPassword] = useState("");
+  const [error,    setError]    = useState<string | null>(null);
+  const [loading,  setLoading]  = useState(false);
+  const [showPass, setShowPass] = useState(false);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
     setLoading(true);
     try {
-      const { token, user } = await loginRequest(email.trim(), password, tenantSlug.trim());
+      const { token, user } = await loginRequest(email.trim(), password);
       setAuth(token, {
         id:         user.id,
         name:       user.full_name,
@@ -66,23 +65,6 @@ export function Login() {
         className="w-full max-w-sm bg-surface-card rounded-2xl border border-surface-border p-7 flex flex-col gap-5 shadow-xl"
       >
         <h1 className="text-white font-bold text-xl">Iniciar sesión</h1>
-
-        {/* Tenant slug */}
-        <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
-            Código del taller
-          </label>
-          <input
-            type="text"
-            value={tenantSlug}
-            onChange={(e) => setTenantSlug(e.target.value)}
-            placeholder="taller-gomez"
-            required
-            autoCapitalize="none"
-            className="h-12 rounded-xl bg-surface-raised border border-surface-border text-white
-                       px-4 text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand"
-          />
-        </div>
 
         {/* Email */}
         <div className="flex flex-col gap-1.5">
@@ -154,7 +136,7 @@ export function Login() {
         {import.meta.env.DEV && (
           <button
             type="button"
-            onClick={() => { setEmail("owner@tallertrack.com"); setPassword("Admin1234!"); setTenantSlug("taller-demo"); }}
+            onClick={() => { setEmail("owner@tallertrack.com"); setPassword("Admin1234!"); }}
             className="text-xs text-gray-500 hover:text-gray-300 transition-colors text-center"
           >
             Usar credenciales de demo

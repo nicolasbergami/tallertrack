@@ -11,39 +11,39 @@ const INVALID_CREDENTIALS = createHttpError(401, "Email o contraseña incorrecto
 
 export const authService = {
   async login(dto: LoginDTO): Promise<LoginResponse> {
-    // 1. Find tenant by slug — tenants table has no RLS, use pool directly
+    const email = dto.email.toLowerCase().trim();
+
+    // 1. Buscar usuario por email globalmente (emails son únicos en toda la plataforma)
+    const userResult = await pool.query<AuthUser & { tenant_id: string }>(
+      `SELECT u.id, u.email, u.full_name, u.role, u.status, u.password_hash, u.tenant_id
+         FROM users u
+        WHERE u.email = $1
+          AND u.deleted_at IS NULL
+        LIMIT 1`,
+      [email]
+    );
+
+    const user = userResult.rows[0] ?? null;
+
+    // Usamos el mismo error genérico para no revelar si el email existe
+    if (!user) throw INVALID_CREDENTIALS;
+
+    // 2. Cargar el tenant asociado al usuario
     const tenantResult = await pool.query<AuthTenant>(
       `SELECT id, slug, name, plan, sub_status
          FROM tenants
-        WHERE slug = $1
+        WHERE id = $1
           AND deleted_at IS NULL`,
-      [dto.tenant_slug]
+      [user.tenant_id]
     );
 
     const tenant = tenantResult.rows[0];
-    if (!tenant) {
-      throw createHttpError(404, `No se encontró el taller "${dto.tenant_slug}".`);
-    }
+    if (!tenant) throw INVALID_CREDENTIALS;
 
-    // 2. Block suspended/cancelled subscriptions
+    // 3. Block suspended/cancelled subscriptions
     if (tenant.sub_status === "canceled") {
       throw createHttpError(403, "La suscripción de este taller está cancelada.");
     }
-
-    // 3. Find user by email within the tenant context (RLS enforced)
-    const user = await withTenantContext<AuthUser | null>(tenant.id, async (client) => {
-      const { rows } = await client.query<AuthUser>(
-        `SELECT id, email, full_name, role, status, password_hash, tenant_id
-           FROM users
-          WHERE email = $1
-            AND tenant_id = $2
-            AND deleted_at IS NULL`,
-        [dto.email.toLowerCase().trim(), tenant.id]
-      );
-      return rows[0] ?? null;
-    });
-
-    if (!user) throw INVALID_CREDENTIALS;
 
     // 4. Guard: inactive/suspended user
     if (user.status !== "active") {

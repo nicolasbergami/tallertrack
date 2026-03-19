@@ -8,6 +8,7 @@ import { PublicTracking } from "./screens/PublicTracking";
 import { Login }          from "./screens/Login";
 import { Profile }        from "./screens/Profile";
 import { Billing }        from "./screens/Billing";
+import { Team }           from "./screens/Team";
 import { History }        from "./screens/History";
 import { Register }       from "./screens/Register";
 import { VerifyOtp }      from "./screens/Register/VerifyOtp";
@@ -92,6 +93,7 @@ export default function App() {
             <Route path="/history"    element={<ProtectedRoute><History    /></ProtectedRoute>} />
             <Route path="/profile"    element={<ProtectedRoute><Profile    /></ProtectedRoute>} />
             <Route path="/billing"    element={<ProtectedRoute><Billing    /></ProtectedRoute>} />
+            <Route path="/team"       element={<ProtectedRoute><Team       /></ProtectedRoute>} />
 
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

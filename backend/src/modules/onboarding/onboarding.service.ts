@@ -19,7 +19,7 @@ const OTP_MAX_ATTEMPTS  = 5;
 const OTP_MAX_RESENDS   = 3;
 const OTP_RESEND_COOLDOWN_SEC = 60;
 const PENDING_REG_TTL_HOURS   = 24; // after this, same CUIT/WhatsApp can re-register
-const TRIAL_DAYS = 14;
+const TRIAL_DAYS = 30;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -262,7 +262,7 @@ export const onboardingService = {
             trial_ends_at, max_users, max_vehicles, settings)
          VALUES ($1, $2, $3, $4, 'AR', 'free', 'trialing',
                  NOW() + INTERVAL '${TRIAL_DAYS} days',
-                 5, 200,
+                 5, 1000,
                  '{"timezone":"America/Argentina/Buenos_Aires","currency":"ARS"}')
          RETURNING id, slug`,
         [slug, reg.workshop_name, reg.cuit, reg.whatsapp]

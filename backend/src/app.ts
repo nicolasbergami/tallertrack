@@ -14,6 +14,7 @@ import onboardingRoutes from "./modules/onboarding/onboarding.routes";
 import whatsappRoutes   from "./modules/whatsapp/whatsapp.routes";
 import vehicleRoutes    from "./modules/vehicles/vehicle.routes";
 import billingRoutes    from "./modules/billing/billing.routes";
+import teamRoutes       from "./modules/team/team.routes";
 import { sessionManager } from "./integrations/whatsapp-direct/session-manager";
 import { env } from "./config/env";
 
@@ -66,6 +67,7 @@ app.use("/api/v1/billing",     billingRoutes);       // mixed — webhook public
 app.use("/api/v1/work-orders", authenticate, requireActiveSubscription, workOrderRoutes);
 app.use("/api/v1/ai",          authenticate, requireActiveSubscription, aiRoutes);
 
+app.use("/api/v1/team",        authenticate, teamRoutes);       // protected — owner/admin only
 app.use("/api/v1/vehicles",    authenticate, vehicleRoutes);   // protected — JWT required
 app.use("/api/v1/whatsapp",    whatsappRoutes);     // protected — JWT required
 

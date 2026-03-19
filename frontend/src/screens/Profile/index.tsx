@@ -1,7 +1,7 @@
 import { useNavigate, Link } from "react-router-dom";
 import { AppShell } from "../../components/layout/AppShell";
 import { useAuthStore } from "../../store/auth.store";
-import { IconLogout, IconChevronRight } from "../../components/ui/Icons";
+import { IconLogout, IconChevronRight, IconTeam } from "../../components/ui/Icons";
 import { WhatsAppSection } from "./WhatsAppSection";
 
 const ROLE_LABELS: Record<string, string> = {
@@ -72,6 +72,25 @@ export function Profile() {
             <InfoRow label="Rol" value={ROLE_LABELS[user.role] ?? user.role} />
           </div>
         </section>
+
+        {/* Team — only for owner/admin */}
+        {(user.role === "owner" || user.role === "admin") && (
+          <section>
+            <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider px-1 mb-2">
+              Gestión
+            </p>
+            <Link to="/team"
+              className="flex items-center justify-between gap-3 w-full p-4
+                         bg-surface-card rounded-2xl border border-surface-border
+                         hover:bg-slate-700/40 transition-colors text-slate-200 group active:scale-[0.99]">
+              <div className="flex items-center gap-3">
+                <IconTeam className="w-5 h-5 text-brand" />
+                <span className="font-semibold text-sm">Mi equipo</span>
+              </div>
+              <IconChevronRight className="w-4 h-4 text-slate-500 group-hover:text-slate-300 transition-colors" />
+            </Link>
+          </section>
+        )}
 
         {/* Subscription */}
         <section>
