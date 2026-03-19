@@ -270,7 +270,7 @@ export const onboardingService = {
       tenantId = tenant.id;
 
       // SET LOCAL para que los INSERT en users pasen el RLS del tenant
-      await client.query("SET LOCAL app.current_tenant_id = $1", [tenantId]);
+      await client.query("SELECT set_config('app.current_tenant_id', $1, true)", [tenantId]);
 
       const { rows: [user] } = await client.query<{ id: string }>(
         `INSERT INTO users (tenant_id, email, password_hash, full_name, role, status)
