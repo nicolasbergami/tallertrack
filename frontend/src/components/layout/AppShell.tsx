@@ -54,10 +54,10 @@ export function AppShell({ children, title, backTo, action }: Props) {
       {/* ── Bottom Nav ── */}
       <nav className="sticky bottom-0 border-t border-surface-border bg-surface/95 backdrop-blur
                       grid grid-cols-4 pb-safe z-40">
-        <NavItem to="/"        Icon={IconOrders}  label="Órdenes"  />
-        <NavItem to="/new"     Icon={IconPlus}    label="Nueva OT" highlight />
-        <NavItem to="/history" Icon={IconHistory} label="Historial" />
-        <NavItem to="/profile" Icon={IconUser}    label="Perfil"   />
+        <NavItem to="/dashboard" Icon={IconOrders}  label="Órdenes"  />
+        <NavItem to="/new"       Icon={IconPlus}    label="Nueva OT" highlight />
+        <NavItem to="/history"   Icon={IconHistory} label="Historial" />
+        <NavItem to="/profile"   Icon={IconUser}    label="Perfil"   />
       </nav>
     </div>
   );
@@ -74,7 +74,7 @@ function NavItem({ to, Icon, label, highlight }: NavItemProps) {
   return (
     <NavLink
       to={to}
-      end={to === "/"}
+      end={to === "/dashboard"}
       className={({ isActive }) => `
         flex flex-col items-center justify-center gap-1 py-2.5 min-h-[3.5rem]
         text-[11px] font-semibold tracking-wide transition-colors touch-feedback

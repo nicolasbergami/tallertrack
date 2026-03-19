@@ -10,7 +10,9 @@ import { Billing }        from "./screens/Billing";
 import { History }        from "./screens/History";
 import { Register }       from "./screens/Register";
 import { VerifyOtp }      from "./screens/Register/VerifyOtp";
+import { Landing }        from "./screens/Landing";
 import { ProtectedRoute } from "./components/ProtectedRoute";
+import { useAuthStore }   from "./store/auth.store";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -21,11 +23,20 @@ const queryClient = new QueryClient({
   },
 });
 
+// Smart root: landing page for guests, dashboard for authenticated users
+function SmartRoot() {
+  const token = useAuthStore((s) => s.token);
+  return token ? <Navigate to="/dashboard" replace /> : <Landing />;
+}
+
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <Routes>
+          {/* Landing / home */}
+          <Route path="/" element={<SmartRoot />} />
+
           {/* Public — no auth required */}
           <Route path="/login"                                element={<Login />} />
           <Route path="/register"                             element={<Register />} />
@@ -33,7 +44,7 @@ export default function App() {
           <Route path="/track/:tenantSlug/:orderNumber"       element={<PublicTracking />} />
 
           {/* Protected — redirect to /login if no token */}
-          <Route path="/"           element={<ProtectedRoute><Dashboard  /></ProtectedRoute>} />
+          <Route path="/dashboard"  element={<ProtectedRoute><Dashboard  /></ProtectedRoute>} />
           <Route path="/new"        element={<ProtectedRoute><NewOrder   /></ProtectedRoute>} />
           <Route path="/orders/:id" element={<ProtectedRoute><OrderDetail /></ProtectedRoute>} />
           <Route path="/history"    element={<ProtectedRoute><History    /></ProtectedRoute>} />

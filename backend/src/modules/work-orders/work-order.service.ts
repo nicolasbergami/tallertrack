@@ -19,17 +19,22 @@ import { env } from "../../config/env";
 import { createHttpError } from "../../middleware/error.middleware";
 
 // ---------------------------------------------------------------------------
-// Helper: fetch tenant slug for QR / tracking URL
+// Helper: fetch tenant slug + name for QR / tracking URL / notifications
 // ---------------------------------------------------------------------------
-async function getTenantSlug(tenantId: string): Promise<string> {
+async function getTenantInfo(tenantId: string): Promise<{ slug: string; name: string }> {
   return withTenantContext(tenantId, async (client) => {
-    const { rows } = await client.query<{ slug: string }>(
-      `SELECT slug FROM tenants WHERE id = $1`,
+    const { rows } = await client.query<{ slug: string; name: string }>(
+      `SELECT slug, name FROM tenants WHERE id = $1`,
       [tenantId]
     );
     if (!rows[0]) throw createHttpError(404, "Tenant not found.");
-    return rows[0].slug;
+    return rows[0];
   });
+}
+
+// Keep backward-compat alias used in getQrCode
+async function getTenantSlug(tenantId: string): Promise<string> {
+  return (await getTenantInfo(tenantId)).slug;
 }
 
 // ---------------------------------------------------------------------------
@@ -214,10 +219,12 @@ export const workOrderService = {
     workOrder: WorkOrderDetail,
     newStatus: WorkOrderStatus
   ): Promise<void> {
-    if (!workOrder.client_phone) return; // No phone on record
+    if (!workOrder.client_phone) {
+      console.log(`[WA] Skipped — order ${workOrder.order_number} has no client phone.`);
+      return;
+    }
 
-    const tenantSlug = await getTenantSlug(tenantId);
-
+    const { slug: tenantSlug, name: workshopName } = await getTenantInfo(tenantId);
     const trackingUrl = `${env.TRACKING_BASE_URL}/${tenantSlug}/${encodeURIComponent(workOrder.order_number)}`;
 
     const message = buildMessage(newStatus, workOrder.client_phone, {
@@ -227,17 +234,25 @@ export const workOrderService = {
       vehicleBrand: workOrder.vehicle_brand,
       vehicleModel: workOrder.vehicle_model,
       trackingUrl,
-      workshopName: tenantSlug, // Ideally fetch from tenants table
+      workshopName,
     });
 
-    if (!message) return; // No template for this status
+    if (!message) {
+      console.log(`[WA] No template for status "${newStatus}" — message not sent.`);
+      return;
+    }
 
     // Prefer the tenant's own WhatsApp number (Baileys) when connected;
     // fall back to the configured provider (mock / Meta Cloud API).
-    if (sessionManager.isConnected(tenantId)) {
+    const useBaileys = sessionManager.isConnected(tenantId);
+    console.log(`[WA] Sending to ${workOrder.client_phone} via ${useBaileys ? "Baileys" : "provider:" + env.WHATSAPP_PROVIDER}`);
+
+    if (useBaileys) {
       await sessionManager.sendMessage(tenantId, workOrder.client_phone, message.body);
     } else {
       await whatsappService.sendMessage(message);
     }
+
+    console.log(`[WA] Delivered — order ${workOrder.order_number}, status ${newStatus}`);
   },
 };

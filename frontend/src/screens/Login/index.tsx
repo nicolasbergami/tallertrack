@@ -43,7 +43,7 @@ export function Login() {
         tenantName: user.tenant_name,
         tenantSlug: user.tenant_slug ?? "",
       });
-      navigate("/", { replace: true });
+      navigate("/dashboard", { replace: true });
     } catch (err) {
       setError((err as Error).message);
     } finally {

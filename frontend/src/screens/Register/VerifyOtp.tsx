@@ -101,7 +101,7 @@ export function VerifyOtp() {
         tenantName: res.user.tenant_name,
         tenantSlug: res.user.tenant_slug,
       });
-      navigate("/", { replace: true });
+      navigate("/dashboard", { replace: true });
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Código incorrecto");
       setDigits(Array(CODE_LENGTH).fill(""));
