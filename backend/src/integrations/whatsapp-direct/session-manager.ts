@@ -52,11 +52,35 @@ export const sessionManager = {
     if (existing && existing.status !== "disconnected") {
       return existing.qrEmitter;
     }
+
     const qrEmitter = new EventEmitter();
+    let settled = false;
+
+    const settle = () => { settled = true; clearTimeout(masterTimeout); };
+
+    // Master timeout covers the pre-socket phase (Baileys ESM import, DB query,
+    // version fetch). If _connect hangs before creating the socket, the inner
+    // 30-second timeout never runs — this one catches that case.
+    const masterTimeout = setTimeout(() => {
+      if (!settled) {
+        console.error(`[WhatsApp] _connect master timeout for tenant ${tenantId} — hung before socket creation`);
+        sessions.delete(tenantId);
+        qrEmitter.emit("error", new Error("La conexión tardó demasiado. Revisá los logs del servidor."));
+      }
+    }, 60_000);
+
+    // Wire up settle() to fire as soon as the emitter emits anything meaningful
+    qrEmitter.once("qr",          settle);
+    qrEmitter.once("connected",   settle);
+    qrEmitter.once("disconnected", settle);
+    qrEmitter.once("error",       settle);
+
     this._connect(tenantId, qrEmitter).catch((err) => {
+      settle();
       console.error(`[WhatsApp] Session start error for tenant ${tenantId}:`, err);
       qrEmitter.emit("error", err);
     });
+
     return qrEmitter;
   },
 
@@ -98,14 +122,18 @@ export const sessionManager = {
 
   // ── Internal: create and wire a WASocket for a tenant ────────────────────
   async _connect(tenantId: string, qrEmitter: EventEmitter): Promise<void> {
+    console.log(`[WhatsApp] [1/4] Starting connection for tenant ${tenantId}`);
+
     // new Function() prevents TypeScript from compiling import() → require()
     // when module target is CommonJS.  Node.js evaluates the native import()
     // at runtime, which correctly handles ESM-only packages like Baileys.
     // eslint-disable-next-line @typescript-eslint/no-implied-eval
     const baileysModule = await (new Function('return import("@whiskeysockets/baileys")')() as Promise<typeof import("@whiskeysockets/baileys") & { Defaults?: { VERSION?: [number, number, number] } }>);
     const { default: makeWASocket, DisconnectReason, fetchLatestBaileysVersion } = baileysModule;
+    console.log(`[WhatsApp] [2/4] Baileys imported for tenant ${tenantId}`);
 
     const { state, saveCreds } = await usePostgresAuthState(tenantId);
+    console.log(`[WhatsApp] [3/4] Auth state loaded for tenant ${tenantId}`);
 
     // fetchLatestBaileysVersion makes an external HTTP request (GitHub/WA servers).
     // In production it can hang indefinitely → apply a 10s timeout and fall back
@@ -115,13 +143,14 @@ export const sessionManager = {
       const result = await Promise.race([
         fetchLatestBaileysVersion(),
         new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error("version fetch timed out after 10s")), 10_000)
+          setTimeout(() => reject(new Error("timed out after 10s")), 10_000)
         ),
       ]);
       version = result.version;
+      console.log(`[WhatsApp] [4/4] WA version ${version} fetched for tenant ${tenantId}`);
     } catch (versionErr) {
-      console.warn(`[WhatsApp] Using bundled Baileys version (${(versionErr as Error).message})`);
       version = baileysModule.Defaults?.VERSION ?? [2, 3000, 1015920];
+      console.warn(`[WhatsApp] [4/4] Version fetch failed (${(versionErr as Error).message}), using bundled ${version} for tenant ${tenantId}`);
     }
 
     const socket = makeWASocket({
@@ -137,6 +166,8 @@ export const sessionManager = {
       } as never,
     });
 
+    console.log(`[WhatsApp] Socket created, waiting for QR/connection for tenant ${tenantId}`);
+
     const session: ManagedSession = { socket, qrEmitter, status: "connecting" };
     sessions.set(tenantId, session);
 
@@ -146,11 +177,11 @@ export const sessionManager = {
     // 30 s, notify the frontend so the user can retry instead of waiting forever.
     const noResponseTimeout = setTimeout(() => {
       if (!qrEverEmitted && session.status !== "connected") {
-        console.warn(`[WhatsApp] No response from server for tenant ${tenantId} — aborting`);
+        console.warn(`[WhatsApp] No response from WA server for tenant ${tenantId} after 30s — aborting`);
         session.status = "disconnected";
         sessions.delete(tenantId);
         try { socket.end(undefined); } catch { /* ignore */ }
-        qrEmitter.emit("error", new Error("WhatsApp no respondió. Verificá la conexión del servidor y reintentá."));
+        qrEmitter.emit("error", new Error("WhatsApp no respondió en 30 segundos. El servidor puede no tener acceso a internet o la IP puede estar bloqueada."));
       }
     }, 30_000);
 
@@ -162,11 +193,12 @@ export const sessionManager = {
       qr?: string;
     }) => {
       const { connection, lastDisconnect, qr } = update;
+      console.log(`[WhatsApp] connection.update for tenant ${tenantId}:`, { connection, hasQr: !!qr });
 
       if (qr) {
         clearTimeout(noResponseTimeout);
-        session.status   = "qr";
-        qrEverEmitted    = true;
+        session.status = "qr";
+        qrEverEmitted  = true;
         qrEmitter.emit("qr", qr);
       }
 
@@ -203,7 +235,7 @@ export const sessionManager = {
             console.warn(`[WhatsApp] Tenant ${tenantId} closed before QR (code ${statusCode})`);
             qrEmitter.emit("error", new Error(`WhatsApp rechazó la conexión (código ${statusCode ?? "desconocido"}). Reintentá en unos segundos.`));
           } else {
-            // Had an active session — reconnect in background (user doesn't need to do anything)
+            // Had an active session — reconnect in background
             console.log(`[WhatsApp] Tenant ${tenantId} disconnected (code ${statusCode}), reconnecting…`);
             await new Promise((r) => setTimeout(r, 5_000));
             const newEmitter = new EventEmitter();
