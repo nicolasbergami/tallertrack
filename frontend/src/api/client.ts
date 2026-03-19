@@ -25,6 +25,12 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     },
   });
 
+  if (response.status === 401) {
+    useAuthStore.getState().logout();
+    window.location.replace("/login");
+    return undefined as T;
+  }
+
   if (!response.ok) {
     const body = await response.json().catch(() => null);
     throw new ApiError(

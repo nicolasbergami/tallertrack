@@ -38,6 +38,12 @@ function QRModal({ onClose, onConnected }: { onClose: () => void; onConnected: (
           signal:  ctrl.signal,
         });
 
+        if (res.status === 401) {
+          useAuthStore.getState().logout();
+          window.location.replace("/login");
+          return;
+        }
+
         if (!res.ok || !res.body) {
           setError("No se pudo iniciar la conexión.");
           return;
