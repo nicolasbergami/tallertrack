@@ -93,13 +93,13 @@ export function VerifyOtp() {
         otp_code:        code,
       });
       setAuth(res.token, {
-        id:          res.user.id,
-        email:       res.user.email,
-        full_name:   res.user.full_name,
-        role:        res.user.role as "owner",
-        tenant_id:   res.user.tenant_id,
-        tenant_name: res.user.tenant_name,
-        tenant_slug: res.user.tenant_slug,
+        id:         res.user.id,
+        email:      res.user.email,
+        name:       res.user.full_name,
+        role:       res.user.role as "owner",
+        tenantId:   res.user.tenant_id,
+        tenantName: res.user.tenant_name,
+        tenantSlug: res.user.tenant_slug,
       });
       navigate("/", { replace: true });
     } catch (err: unknown) {

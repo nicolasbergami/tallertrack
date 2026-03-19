@@ -2,6 +2,7 @@ import { useNavigate } from "react-router-dom";
 import { AppShell } from "../../components/layout/AppShell";
 import { useAuthStore } from "../../store/auth.store";
 import { IconLogout, IconChevronRight } from "../../components/ui/Icons";
+import { WhatsAppSection } from "./WhatsAppSection";
 
 const ROLE_LABELS: Record<string, string> = {
   owner:        "Propietario",
@@ -71,6 +72,9 @@ export function Profile() {
             <InfoRow label="Rol" value={ROLE_LABELS[user.role] ?? user.role} />
           </div>
         </section>
+
+        {/* WhatsApp connection */}
+        <WhatsAppSection />
 
         {/* Logout */}
         <button

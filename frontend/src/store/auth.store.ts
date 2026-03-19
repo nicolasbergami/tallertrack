@@ -8,6 +8,7 @@ interface User {
   role: "owner" | "admin" | "mechanic" | "receptionist";
   tenantId: string;
   tenantName: string;
+  tenantSlug: string;
 }
 
 interface AuthState {

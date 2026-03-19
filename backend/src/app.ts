@@ -9,6 +9,8 @@ import workOrderRoutes from "./modules/work-orders/work-order.routes";
 import publicRoutes    from "./modules/public/public.routes";
 import aiRoutes        from "./modules/ai/ai.routes";
 import onboardingRoutes from "./modules/onboarding/onboarding.routes";
+import whatsappRoutes   from "./modules/whatsapp/whatsapp.routes";
+import { sessionManager } from "./integrations/whatsapp-direct/session-manager";
 import { env } from "./config/env";
 
 const app = express();
@@ -56,6 +58,12 @@ app.use("/api/v1/work-orders", workOrderRoutes);
 app.use("/api/v1/public",      publicRoutes);
 app.use("/api/v1/ai",          aiRoutes);
 app.use("/api/v1/onboarding", onboardingRoutes); // public — no auth
+app.use("/api/v1/whatsapp",  whatsappRoutes);    // protected — JWT required
+
+// Restore previously-connected WhatsApp sessions after DB is ready
+sessionManager.restoreAll().catch((err) =>
+  console.error("[WhatsApp] Failed to restore sessions:", err)
+);
 
 // ---------------------------------------------------------------------------
 // Serve frontend static files in production

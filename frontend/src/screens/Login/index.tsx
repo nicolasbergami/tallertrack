@@ -41,6 +41,7 @@ export function Login() {
         role:       user.role,
         tenantId:   user.tenant_id,
         tenantName: user.tenant_name,
+        tenantSlug: user.tenant_slug ?? "",
       });
       navigate("/", { replace: true });
     } catch (err) {

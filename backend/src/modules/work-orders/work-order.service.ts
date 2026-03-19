@@ -4,6 +4,7 @@ import { historyLogRepository } from "../../shared/history-log.repository";
 import { WorkOrderStateMachine } from "./state-machine/transitions";
 import { buildMessage } from "../../integrations/whatsapp/templates";
 import { whatsappService } from "../../integrations/whatsapp/whatsapp.service";
+import { sessionManager } from "../../integrations/whatsapp-direct/session-manager";
 import { qrService } from "../../integrations/qr/qr.service";
 import {
   WorkOrder,
@@ -231,6 +232,12 @@ export const workOrderService = {
 
     if (!message) return; // No template for this status
 
-    await whatsappService.sendMessage(message);
+    // Prefer the tenant's own WhatsApp number (Baileys) when connected;
+    // fall back to the configured provider (mock / Meta Cloud API).
+    if (sessionManager.isConnected(tenantId)) {
+      await sessionManager.sendMessage(tenantId, workOrder.client_phone, message.body);
+    } else {
+      await whatsappService.sendMessage(message);
+    }
   },
 };
