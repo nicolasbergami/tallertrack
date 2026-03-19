@@ -125,52 +125,72 @@ export const onboardingService = {
     }
 
     // 3. Verificar email duplicado en tenants activos
+    const email = raw.email.toLowerCase().trim();
     const { rows: existingUsers } = await pool.query(
       `SELECT u.id FROM users u
          JOIN tenants t ON t.id = u.tenant_id
         WHERE u.email = $1 AND t.deleted_at IS NULL AND u.deleted_at IS NULL
         LIMIT 1`,
-      [raw.email.toLowerCase().trim()]
+      [email]
     );
     if (existingUsers.length > 0) {
       throw createHttpError(409, "Ya existe una cuenta con ese email.");
     }
 
-    // 4. Verificar registro pendiente activo (anti-spam: bloqueamos 24h)
-    const { rows: activePending } = await pool.query(
-      `SELECT id FROM tenant_registrations
+    // 4. Verificar registro pendiente activo
+    const { rows: activePending } = await pool.query<{ id: string; email: string }>(
+      `SELECT id, email FROM tenant_registrations
         WHERE (cuit = $1 OR whatsapp = $2)
           AND status = 'pending'
           AND created_at > NOW() - INTERVAL '${PENDING_REG_TTL_HOURS} hours'
         LIMIT 1`,
       [cuit, whatsapp]
     );
+
+    const passwordHash = await bcrypt.hash(raw.password, 12);
+    const otp          = generateOtp();
+    let regId: string;
+
     if (activePending.length > 0) {
-      throw createHttpError(409,
-        "Ya existe un registro pendiente con este CUIT o WhatsApp. " +
-        "Revisa tu WhatsApp o espera 24 horas para intentarlo de nuevo."
+      const pending = activePending[0];
+      if (pending.email !== email) {
+        // Distinto email → bloquear (posible abuso)
+        throw createHttpError(409,
+          "Ya existe un registro pendiente con este CUIT o WhatsApp. " +
+          "Revisa tu WhatsApp o espera 24 horas para intentarlo de nuevo."
+        );
+      }
+      // Mismo email → es la misma persona reintentando; reutilizar el registro
+      regId = pending.id;
+      const otpHash = hashOtp(regId, otp);
+      await pool.query(
+        `UPDATE tenant_registrations
+            SET workshop_name = $1, password_hash = $2, otp_hash = $3,
+                otp_expires_at = NOW() + INTERVAL '${OTP_TTL_MINUTES} minutes',
+                otp_attempts = 0, created_at = NOW()
+          WHERE id = $4`,
+        [raw.workshop_name.trim(), passwordHash, otpHash, regId]
+      );
+    } else {
+      // 5. Crear registro pendiente nuevo
+      const { rows: [reg] } = await pool.query<{ id: string }>(
+        `INSERT INTO tenant_registrations
+           (workshop_name, email, password_hash, cuit, whatsapp, otp_hash, otp_expires_at)
+         VALUES ($1, $2, $3, $4, $5, 'placeholder',
+                 NOW() + INTERVAL '${OTP_TTL_MINUTES} minutes')
+         RETURNING id`,
+        [raw.workshop_name.trim(), email, passwordHash, cuit, whatsapp]
+      );
+      regId = reg.id;
+      const otpHash = hashOtp(regId, otp);
+      await pool.query(
+        `UPDATE tenant_registrations SET otp_hash = $1 WHERE id = $2`,
+        [otpHash, regId]
       );
     }
 
-    // 5. Crear registro pendiente
-    const passwordHash = await bcrypt.hash(raw.password, 12);
-    const otp          = generateOtp();
-
-    // Insertamos primero sin hash para obtener el ID, luego actualizamos
-    const { rows: [reg] } = await pool.query<{ id: string }>(
-      `INSERT INTO tenant_registrations
-         (workshop_name, email, password_hash, cuit, whatsapp, otp_hash, otp_expires_at)
-       VALUES ($1, $2, $3, $4, $5, 'placeholder',
-               NOW() + INTERVAL '${OTP_TTL_MINUTES} minutes')
-       RETURNING id`,
-      [raw.workshop_name.trim(), raw.email.toLowerCase().trim(), passwordHash, cuit, whatsapp]
-    );
-
-    const otpHash = hashOtp(reg.id, otp);
-    await pool.query(
-      `UPDATE tenant_registrations SET otp_hash = $1 WHERE id = $2`,
-      [otpHash, reg.id]
-    );
+    // Alias para el resto del flujo
+    const reg = { id: regId };
 
     // 6. Enviar OTP por WhatsApp (fire-and-forget — no bloquea el registro)
     whatsappService.sendMessage({

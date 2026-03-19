@@ -16,7 +16,7 @@ export function Register() {
   const [form, setForm] = useState({
     workshop_name: "",
     cuit:          "",
-    whatsapp:      "",
+    whatsapp:      "+54",
     email:         "",
     password:      "",
     confirmPassword: "",
@@ -28,7 +28,11 @@ export function Register() {
 
   function set(field: keyof typeof form) {
     return (e: React.ChangeEvent<HTMLInputElement>) => {
-      setForm(prev => ({ ...prev, [field]: e.target.value }));
+      let value = e.target.value;
+      if (field === "whatsapp" && !value.startsWith("+54")) {
+        value = "+54" + value.replace(/^\+54/, "");
+      }
+      setForm(prev => ({ ...prev, [field]: value }));
       setErrors(prev => ({ ...prev, [field]: "" }));
       setApiError("");
     };
@@ -40,7 +44,7 @@ export function Register() {
     if (!form.cuit.trim())          e.cuit = "Requerido";
     else if (!/^\d{2}-?\d{8}-?\d$/.test(form.cuit.replace(/\s/g,"")))
       e.cuit = "Formato: XX-XXXXXXXX-X";
-    if (!form.whatsapp.trim())      e.whatsapp = "Requerido";
+    if (form.whatsapp.trim() === "+54" || !form.whatsapp.trim()) e.whatsapp = "Ingresá tu número de WhatsApp";
     if (!form.email.trim())         e.email = "Requerido";
     else if (!/\S+@\S+\.\S+/.test(form.email)) e.email = "Email inválido";
     if (!form.password)             e.password = "Requerido";
