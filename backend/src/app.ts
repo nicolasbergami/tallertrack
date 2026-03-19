@@ -4,12 +4,14 @@ import path from "path";
 import fs from "fs";
 import { rateLimit } from "express-rate-limit";
 import { errorHandler } from "./middleware/error.middleware";
+import { requireActiveSubscription } from "./middleware/subscription.middleware";
 import authRoutes       from "./modules/auth/auth.routes";
-import workOrderRoutes from "./modules/work-orders/work-order.routes";
-import publicRoutes    from "./modules/public/public.routes";
-import aiRoutes        from "./modules/ai/ai.routes";
+import workOrderRoutes  from "./modules/work-orders/work-order.routes";
+import publicRoutes     from "./modules/public/public.routes";
+import aiRoutes         from "./modules/ai/ai.routes";
 import onboardingRoutes from "./modules/onboarding/onboarding.routes";
 import whatsappRoutes   from "./modules/whatsapp/whatsapp.routes";
+import billingRoutes    from "./modules/billing/billing.routes";
 import { sessionManager } from "./integrations/whatsapp-direct/session-manager";
 import { env } from "./config/env";
 
@@ -54,11 +56,15 @@ app.get("/health", (_req, res) => {
 // API Routes
 // ---------------------------------------------------------------------------
 app.use("/api/v1/auth",        authRoutes);
-app.use("/api/v1/work-orders", workOrderRoutes);
-app.use("/api/v1/public",      publicRoutes);
-app.use("/api/v1/ai",          aiRoutes);
-app.use("/api/v1/onboarding", onboardingRoutes); // public — no auth
-app.use("/api/v1/whatsapp",  whatsappRoutes);    // protected — JWT required
+app.use("/api/v1/public",      publicRoutes);       // public — tracking
+app.use("/api/v1/onboarding",  onboardingRoutes);   // public — registration
+app.use("/api/v1/billing",     billingRoutes);       // mixed — webhook public, rest protected
+
+// Subscription-gated routes (blocked after trial/paid period expires)
+app.use("/api/v1/work-orders", requireActiveSubscription, workOrderRoutes);
+app.use("/api/v1/ai",          requireActiveSubscription, aiRoutes);
+
+app.use("/api/v1/whatsapp",    whatsappRoutes);     // protected — JWT required
 
 // Restore previously-connected WhatsApp sessions after DB is ready
 sessionManager.restoreAll().catch((err) =>

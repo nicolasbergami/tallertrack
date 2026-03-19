@@ -1,4 +1,4 @@
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { AppShell } from "../../components/layout/AppShell";
 import { useAuthStore } from "../../store/auth.store";
 import { IconLogout, IconChevronRight } from "../../components/ui/Icons";
@@ -71,6 +71,26 @@ export function Profile() {
             <InfoRow label="Email" value={user.email} />
             <InfoRow label="Rol" value={ROLE_LABELS[user.role] ?? user.role} />
           </div>
+        </section>
+
+        {/* Subscription */}
+        <section>
+          <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider px-1 mb-2">
+            Plan
+          </p>
+          <Link to="/billing"
+            className="flex items-center justify-between gap-3 w-full p-4
+                       bg-surface-card rounded-2xl border border-surface-border
+                       hover:bg-slate-700/40 transition-colors text-slate-200 group active:scale-[0.99]">
+            <div className="flex items-center gap-3">
+              <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round"
+                  d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+              </svg>
+              <span className="font-semibold text-sm">Suscripción y facturación</span>
+            </div>
+            <IconChevronRight className="w-4 h-4 text-slate-500 group-hover:text-slate-300 transition-colors" />
+          </Link>
         </section>
 
         {/* WhatsApp connection */}
