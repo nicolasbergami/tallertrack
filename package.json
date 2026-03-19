@@ -10,6 +10,8 @@
     "build:frontend": "cd frontend && npm ci && npm run build",
     "build:backend":  "cd backend  && npm ci && npm run build",
     "start": "node backend/dist/server.js",
+    "migrate": "node backend/dist/scripts/migrate.js",
+    "seed": "node backend/dist/scripts/seed.js",
     "dev":   "concurrently \"cd backend && npm run dev\" \"cd frontend && npm run dev\""
   }
 }
