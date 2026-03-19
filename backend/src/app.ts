@@ -4,6 +4,7 @@ import path from "path";
 import fs from "fs";
 import { rateLimit } from "express-rate-limit";
 import { errorHandler } from "./middleware/error.middleware";
+import { authenticate } from "./middleware/auth.middleware";
 import { requireActiveSubscription } from "./middleware/subscription.middleware";
 import authRoutes       from "./modules/auth/auth.routes";
 import workOrderRoutes  from "./modules/work-orders/work-order.routes";
@@ -61,8 +62,8 @@ app.use("/api/v1/onboarding",  onboardingRoutes);   // public — registration
 app.use("/api/v1/billing",     billingRoutes);       // mixed — webhook public, rest protected
 
 // Subscription-gated routes (blocked after trial/paid period expires)
-app.use("/api/v1/work-orders", requireActiveSubscription, workOrderRoutes);
-app.use("/api/v1/ai",          requireActiveSubscription, aiRoutes);
+app.use("/api/v1/work-orders", authenticate, requireActiveSubscription, workOrderRoutes);
+app.use("/api/v1/ai",          authenticate, requireActiveSubscription, aiRoutes);
 
 app.use("/api/v1/whatsapp",    whatsappRoutes);     // protected — JWT required
 
