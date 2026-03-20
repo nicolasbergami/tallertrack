@@ -139,16 +139,8 @@ export function QuoteSection({ quote, tenantSlug, orderNumber, queryKey }: Props
         </div>
 
         {/* ── Totals ── */}
-        <div className="mt-4 pt-4 border-t border-gray-100 space-y-1.5">
-          <div className="flex justify-between text-sm text-gray-500">
-            <span>Subtotal</span>
-            <span>{CLP(quote.subtotal)}</span>
-          </div>
-          <div className="flex justify-between text-sm text-gray-500">
-            <span>IVA ({(quote.tax_rate * 100).toFixed(0)}%)</span>
-            <span>{CLP(quote.tax_amount)}</span>
-          </div>
-          <div className="flex justify-between text-base font-bold text-gray-900 pt-1 border-t border-gray-200">
+        <div className="mt-4 pt-4 border-t border-gray-100">
+          <div className="flex justify-between text-base font-bold text-gray-900">
             <span>Total</span>
             <span className="text-orange-600">{CLP(quote.total)}</span>
           </div>

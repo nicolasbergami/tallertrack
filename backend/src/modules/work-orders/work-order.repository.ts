@@ -240,12 +240,12 @@ export const workOrderRepository = {
       0,
     );
 
-    // Insert quote — quote_number generated via helper, tax_amount aliased as tax
+    // Insert quote — tax_rate=0 because prices entered are already IVA-inclusive
     const quoteNumber = await generateQuoteNumber(client, tenantId);
     const { rows: quoteRows } = await client.query(
       `INSERT INTO quotes
-         (tenant_id, work_order_id, quote_number, status, subtotal, notes)
-       VALUES ($1, $2, $3, 'draft', $4, $5)
+         (tenant_id, work_order_id, quote_number, status, subtotal, tax_rate, notes)
+       VALUES ($1, $2, $3, 'draft', $4, 0, $5)
        RETURNING *, tax_amount AS tax`,
       [tenantId, workOrderId, quoteNumber, subtotal, dto.notes ?? null],
     );

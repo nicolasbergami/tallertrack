@@ -89,9 +89,7 @@ export function AiQuoteModal({ workOrderId, complaint, onClose, onSaved }: Props
   };
 
   // ── Subtotal ─────────────────────────────────────────────────────────────
-  const subtotal = items.reduce((s, it) => s + it.quantity * it.unit_price_estimate, 0);
-  const tax      = Math.round(subtotal * 0.19);
-  const total    = subtotal + tax;
+  const total = items.reduce((s, it) => s + it.quantity * it.unit_price_estimate, 0);
 
   // ────────────────────────────────────────────────────────────────────────
   return (
@@ -307,16 +305,8 @@ export function AiQuoteModal({ workOrderId, complaint, onClose, onSaved }: Props
               </div>
 
               {/* Totals */}
-              {subtotal > 0 && (
+              {total > 0 && (
                 <div className="rounded-xl bg-surface-raised border border-surface-border overflow-hidden">
-                  <div className="flex justify-between px-4 py-2 border-b border-surface-border/60">
-                    <span className="text-sm text-slate-400">Subtotal</span>
-                    <span className="text-sm text-slate-300 tabular-nums font-mono">{formatCLP(subtotal)}</span>
-                  </div>
-                  <div className="flex justify-between px-4 py-2 border-b border-surface-border/60">
-                    <span className="text-sm text-slate-400">IVA (19%)</span>
-                    <span className="text-sm text-slate-300 tabular-nums font-mono">{formatCLP(tax)}</span>
-                  </div>
                   <div className="flex justify-between px-4 py-2.5">
                     <span className="text-sm font-bold text-slate-200">Total</span>
                     <span className="text-base font-black text-brand tabular-nums font-mono">

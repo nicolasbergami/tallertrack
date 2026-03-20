@@ -39,10 +39,10 @@ function normalizeArgentinePhone(raw: string): string {
 // ---------------------------------------------------------------------------
 // Helper: fetch tenant slug + name for QR / tracking URL / notifications
 // ---------------------------------------------------------------------------
-async function getTenantInfo(tenantId: string): Promise<{ slug: string; name: string }> {
+async function getTenantInfo(tenantId: string): Promise<{ slug: string; name: string; phone: string | null }> {
   return withTenantContext(tenantId, async (client) => {
-    const { rows } = await client.query<{ slug: string; name: string }>(
-      `SELECT slug, name FROM tenants WHERE id = $1`,
+    const { rows } = await client.query<{ slug: string; name: string; phone: string | null }>(
+      `SELECT slug, name, phone FROM tenants WHERE id = $1`,
       [tenantId]
     );
     if (!rows[0]) throw createHttpError(404, "Tenant not found.");
@@ -429,9 +429,12 @@ export const workOrderService = {
       return workOrderRepository.findById(client, workOrderId, tenantId);
     });
 
-    // Fire-and-forget WhatsApp for 'in_progress'
+    // Fire-and-forget: notify client (in_progress) + notify workshop (approved)
     this._notifyClient(tenantId, updated, "in_progress").catch((err) =>
       console.error("[WorkOrderService] WhatsApp approve notification failed:", err)
+    );
+    this._notifyWorkshop(tenantId, updated, "approved").catch((err) =>
+      console.error("[WorkOrderService] WhatsApp workshop approval notification failed:", err)
     );
   },
 
@@ -512,10 +515,48 @@ export const workOrderService = {
       return workOrderRepository.findById(client, workOrderId, tenantId);
     });
 
-    // Fire-and-forget WhatsApp for 'cancelled'
+    // Fire-and-forget: notify client (cancelled) + notify workshop (rejected)
     this._notifyClient(tenantId, updated, "cancelled").catch((err) =>
       console.error("[WorkOrderService] WhatsApp reject notification failed:", err)
     );
+    this._notifyWorkshop(tenantId, updated, "rejected").catch((err) =>
+      console.error("[WorkOrderService] WhatsApp workshop rejection notification failed:", err)
+    );
+  },
+
+  // -------------------------------------------------------------------------
+  // Internal: notify the workshop phone when a client approves or rejects
+  // -------------------------------------------------------------------------
+  async _notifyWorkshop(
+    tenantId: string,
+    workOrder: WorkOrderDetail,
+    event: "approved" | "rejected",
+  ): Promise<void> {
+    const { phone: workshopPhone, name: workshopName } = await getTenantInfo(tenantId);
+
+    if (!workshopPhone) {
+      console.log(`[WA] Workshop notification skipped — no phone for tenant ${tenantId}`);
+      return;
+    }
+
+    const phone = normalizeArgentinePhone(workshopPhone);
+    const plate = [workOrder.vehicle_brand, workOrder.vehicle_model, workOrder.vehicle_plate]
+      .filter(Boolean)
+      .join(" ");
+
+    const body =
+      event === "approved"
+        ? `✅ *Presupuesto APROBADO* — Orden #${workOrder.order_number}\nEl cliente ${workOrder.client_name} aprobó el presupuesto del vehículo ${plate}.\n¡Ya podés comenzar la reparación!`
+        : `❌ *Presupuesto RECHAZADO* — Orden #${workOrder.order_number}\nEl cliente ${workOrder.client_name} rechazó el presupuesto del vehículo ${plate}.`;
+
+    console.log(`[WA] Notifying workshop (${workshopName}) at ${phone} — event: ${event}`);
+
+    const useBaileys = sessionManager.isConnected(tenantId);
+    if (useBaileys) {
+      await sessionManager.sendMessage(tenantId, phone, body);
+    } else {
+      await whatsappService.sendMessage({ to: phone, body });
+    }
   },
 
   // -------------------------------------------------------------------------
