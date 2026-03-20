@@ -97,4 +97,11 @@ router.patch(
  */
 router.get("/:id/remito", workOrderController.getRemitoPdf);
 
+/**
+ * @route   GET /api/v1/work-orders/:id/summary
+ * @desc    Full order summary with latest quote + items (for delivered/cancelled view)
+ * @access  All authenticated roles
+ */
+router.get("/:id/summary", workOrderController.getSummary);
+
 export default router;

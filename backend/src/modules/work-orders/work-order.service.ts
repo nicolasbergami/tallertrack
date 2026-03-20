@@ -615,4 +615,18 @@ export const workOrderService = {
 
     console.log(`[WA] Quote notification delivered — order ${workOrder.order_number}`);
   },
+
+  // -------------------------------------------------------------------------
+  // Summary: order detail + latest quote with items (for delivered/cancelled view)
+  // -------------------------------------------------------------------------
+  async getSummary(
+    tenantId: string,
+    workOrderId: string,
+  ): Promise<WorkOrderDetail & { quote: QuoteWithItems | null }> {
+    return withTenantContext(tenantId, async (client) => {
+      const order = await workOrderRepository.findById(client, workOrderId, tenantId);
+      const quote = await workOrderRepository.getLatestQuote(client, workOrderId, tenantId);
+      return { ...order, quote };
+    });
+  },
 };
