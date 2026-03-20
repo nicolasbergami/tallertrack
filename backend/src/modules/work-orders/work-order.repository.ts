@@ -234,16 +234,10 @@ export const workOrderRepository = {
     workOrderId: string,
     dto: CreateQuoteDTO,
   ): Promise<QuoteWithItems> {
-    const TAX_RATE = 0.19; // IVA Chile
-
-    // Subtotal before tax
     const subtotal = dto.items.reduce(
       (sum, i) => sum + i.unit_price * i.quantity,
       0,
     );
-    const tax   = Math.round(subtotal * TAX_RATE);
-    const total = subtotal + tax;
-
     // Insert quote
     const quoteNumber = await generateQuoteNumber(client, tenantId);
     const { rows: quoteRows } = await client.query(
