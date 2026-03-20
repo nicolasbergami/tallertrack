@@ -73,7 +73,7 @@ const listQuerySchema = z.object({
   status: z
     .enum([...WORK_ORDER_STATUSES] as [WorkOrderStatus, ...WorkOrderStatus[]])
     .optional(),
-  limit:  z.coerce.number().int().min(1).max(100).default(20),
+  limit:  z.coerce.number().int().min(1).max(500).default(20),
   offset: z.coerce.number().int().min(0).default(0),
 });
 

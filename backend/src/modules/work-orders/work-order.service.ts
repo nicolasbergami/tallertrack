@@ -21,6 +21,22 @@ import { env } from "../../config/env";
 import { createHttpError } from "../../middleware/error.middleware";
 
 // ---------------------------------------------------------------------------
+// Helper: normalize an Argentine phone number to WhatsApp format (549XXXXXXXXXX)
+// Examples:
+//   3535632678     → 5493535632678
+//   03535632678    → 5493535632678  (strips leading 0)
+//   543535632678   → 5493535632678  (inserts mobile 9)
+//   5493535632678  → 5493535632678  (already correct)
+// ---------------------------------------------------------------------------
+function normalizeArgentinePhone(raw: string): string {
+  let digits = raw.replace(/\D/g, "");
+  if (digits.startsWith("0")) digits = digits.slice(1);
+  if (digits.startsWith("549")) return digits;
+  if (digits.startsWith("54")) return "549" + digits.slice(2);
+  return "549" + digits;
+}
+
+// ---------------------------------------------------------------------------
 // Helper: fetch tenant slug + name for QR / tracking URL / notifications
 // ---------------------------------------------------------------------------
 async function getTenantInfo(tenantId: string): Promise<{ slug: string; name: string }> {
@@ -265,10 +281,13 @@ export const workOrderService = {
       return;
     }
 
+    // Normalize to Argentine WhatsApp format: 549XXXXXXXXXX (13 digits, no +)
+    const phone = normalizeArgentinePhone(workOrder.client_phone);
+
     const { slug: tenantSlug, name: workshopName } = await getTenantInfo(tenantId);
     const trackingUrl = `${env.TRACKING_BASE_URL}/${tenantSlug}/${encodeURIComponent(workOrder.order_number)}`;
 
-    const message = buildMessage(newStatus, workOrder.client_phone, {
+    const message = buildMessage(newStatus, phone, {
       clientName:   workOrder.client_name,
       orderNumber:  workOrder.order_number,
       vehiclePlate: workOrder.vehicle_plate,
@@ -286,10 +305,10 @@ export const workOrderService = {
     // Prefer the tenant's own WhatsApp number (Baileys) when connected;
     // fall back to the configured provider (mock / Meta Cloud API).
     const useBaileys = sessionManager.isConnected(tenantId);
-    console.log(`[WA] Sending to ${workOrder.client_phone} via ${useBaileys ? "Baileys" : "provider:" + env.WHATSAPP_PROVIDER}`);
+    console.log(`[WA] Sending to ${phone} via ${useBaileys ? "Baileys" : "provider:" + env.WHATSAPP_PROVIDER}`);
 
     if (useBaileys) {
-      await sessionManager.sendMessage(tenantId, workOrder.client_phone, message.body);
+      await sessionManager.sendMessage(tenantId, phone, message.body);
     } else {
       await whatsappService.sendMessage(message);
     }
