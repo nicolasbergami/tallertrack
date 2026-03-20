@@ -5,7 +5,7 @@ import { AppShell } from "../../components/layout/AppShell";
 import { workOrdersApi } from "../../api/work-orders.api";
 import { getStatusConfig, ACTIVE_STATUSES } from "../../config/status.config";
 import { IconSearch, IconX } from "../../components/ui/Icons";
-import { WorkOrderDetail, WorkOrderStatus } from "../../types/work-order";
+import { WorkOrderDetail, WorkOrderStatus, PaymentStatus } from "../../types/work-order";
 import { PlateVisual } from "../../components/ui/PlateVisual";
 
 type StatusFilter = "all" | "active" | "delivered" | "cancelled";
@@ -31,7 +31,7 @@ export function History() {
     [data],
   );
 
-  // ── Derived stats (from all orders, before any filter) ──────────────────
+  // ── Derived stats ─────────────────────────────────────────────────────────
   const stats = useMemo(() => ({
     total:     allOrders.length,
     active:    allOrders.filter((o) => (ACTIVE_STATUSES as string[]).includes(o.status)).length,
@@ -39,26 +39,23 @@ export function History() {
     cancelled: allOrders.filter((o) => o.status === "cancelled").length,
   }), [allOrders]);
 
-  // ── Unique mechanics ─────────────────────────────────────────────────────
+  // ── Unique mechanics ──────────────────────────────────────────────────────
   const mechanics = useMemo(() => {
     const names = new Set<string>();
     allOrders.forEach((o) => { if (o.assigned_user_name) names.add(o.assigned_user_name); });
     return Array.from(names).sort();
   }, [allOrders]);
 
-  // ── Filtered list (all filters combined) ────────────────────────────────
+  // ── Filtered list ─────────────────────────────────────────────────────────
   const filtered = useMemo(() => {
     let list = allOrders;
 
-    // Status tab
     if (statusFilter === "active")    list = list.filter((o) => (ACTIVE_STATUSES as string[]).includes(o.status));
     else if (statusFilter === "delivered") list = list.filter((o) => o.status === "delivered");
     else if (statusFilter === "cancelled") list = list.filter((o) => o.status === "cancelled");
 
-    // Mechanic chip
     if (mechanicFilter) list = list.filter((o) => o.assigned_user_name === mechanicFilter);
 
-    // Text search
     const q = search.trim().toUpperCase();
     if (q) {
       list = list.filter((o) =>
@@ -74,13 +71,17 @@ export function History() {
     return list;
   }, [allOrders, search, mechanicFilter, statusFilter]);
 
-  // ── Group by month ───────────────────────────────────────────────────────
+  // ── Group by month → by plate ─────────────────────────────────────────────
   const grouped = useMemo(() => {
-    const map = new Map<string, WorkOrderDetail[]>();
+    // month → plate → orders[]
+    const map = new Map<string, Map<string, WorkOrderDetail[]>>();
     for (const o of filtered) {
-      const key = new Date(o.received_at).toLocaleDateString("es-AR", { month: "long", year: "numeric" });
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(o);
+      const month = new Date(o.received_at).toLocaleDateString("es-AR", { month: "long", year: "numeric" });
+      if (!map.has(month)) map.set(month, new Map());
+      const byPlate = map.get(month)!;
+      const plate = o.vehicle_plate.toUpperCase();
+      if (!byPlate.has(plate)) byPlate.set(plate, []);
+      byPlate.get(plate)!.push(o);
     }
     return map;
   }, [filtered]);
@@ -174,7 +175,7 @@ export function History() {
               </div>
             )}
 
-            {/* Result count / active filters */}
+            {/* Result count */}
             {allOrders.length > 0 && (
               <div className="flex items-center justify-between px-4 py-2 border-b border-surface-border/50">
                 <p className="text-[11px] text-slate-600">
@@ -193,7 +194,7 @@ export function History() {
               </div>
             )}
 
-            {/* Empty: no orders at all */}
+            {/* Empty: no orders */}
             {allOrders.length === 0 && (
               <div className="flex flex-col items-center justify-center py-24 gap-4 text-center px-8">
                 <div className="w-16 h-16 rounded-2xl bg-surface-card border border-surface-border flex items-center justify-center">
@@ -209,7 +210,7 @@ export function History() {
               </div>
             )}
 
-            {/* Empty: filters returned nothing */}
+            {/* Empty: filters */}
             {allOrders.length > 0 && filtered.length === 0 && (
               <div className="flex flex-col items-center justify-center py-16 gap-3 text-center px-8 animate-fade-in">
                 <div className="w-12 h-12 rounded-2xl bg-surface-card border border-surface-border flex items-center justify-center">
@@ -225,11 +226,11 @@ export function History() {
             {/* Grouped list */}
             {filtered.length > 0 && (
               <div className="flex flex-col pb-8 animate-slide-up">
-                {Array.from(grouped.entries()).map(([month, orders]) => (
+                {Array.from(grouped.entries()).map(([month, byPlate]) => (
                   <MonthSection
                     key={month}
                     month={month}
-                    orders={orders}
+                    byPlate={byPlate}
                     search={search}
                     onPress={(id) => navigate(`/orders/${id}`)}
                   />
@@ -243,7 +244,7 @@ export function History() {
   );
 }
 
-// ── Stats tile (tappable to filter by status) ─────────────────────────────
+// ── Stats tile ────────────────────────────────────────────────────────────────
 
 function StatTile({
   value, label, valueColor = "text-slate-200",
@@ -274,19 +275,19 @@ function StatTile({
   );
 }
 
-// ── Month section ─────────────────────────────────────────────────────────
+// ── Month section ─────────────────────────────────────────────────────────────
 
 function MonthSection({
-  month, orders, search, onPress,
+  month, byPlate, search, onPress,
 }: {
   month: string;
-  orders: WorkOrderDetail[];
+  byPlate: Map<string, WorkOrderDetail[]>;
   search: string;
   onPress: (id: string) => void;
 }) {
-  const delivered  = orders.filter((o) => o.status === "delivered").length;
-  const cancelled  = orders.filter((o) => o.status === "cancelled").length;
-  const inProgress = orders.length - delivered - cancelled;
+  const allOrders   = Array.from(byPlate.values()).flat();
+  const delivered   = allOrders.filter((o) => o.status === "delivered").length;
+  const inProgress  = allOrders.filter((o) => (ACTIVE_STATUSES as string[]).includes(o.status)).length;
 
   return (
     <div>
@@ -297,26 +298,76 @@ function MonthSection({
         </span>
         <div className="flex items-center gap-1.5 flex-shrink-0">
           <span className="text-[10px] font-mono text-slate-600 bg-surface-raised px-1.5 py-0.5 rounded-md">
-            {orders.length}
+            {allOrders.length}
           </span>
           {delivered > 0 && (
-            <span className="text-[10px] text-green-600 font-semibold">
-              {delivered} ✓
-            </span>
+            <span className="text-[10px] text-green-600 font-semibold">{delivered} ✓</span>
           )}
           {inProgress > 0 && (
-            <span className="text-[10px] text-amber-600 font-semibold">
-              {inProgress} activas
-            </span>
+            <span className="text-[10px] text-amber-600 font-semibold">{inProgress} activas</span>
           )}
         </div>
         <div className="flex-1 h-px bg-surface-raised/60" />
       </div>
 
-      {/* Cards */}
+      {/* Vehicle groups */}
       <div className="flex flex-col gap-2 px-4">
+        {Array.from(byPlate.entries()).map(([plate, orders]) => (
+          <VehicleGroup
+            key={plate}
+            orders={orders}
+            search={search}
+            onPress={onPress}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Vehicle group card (plate header + order rows) ────────────────────────────
+
+function VehicleGroup({
+  orders, search, onPress,
+}: {
+  orders: WorkOrderDetail[];
+  search: string;
+  onPress: (id: string) => void;
+}) {
+  const rep = orders[0]; // representative order for vehicle info
+  const pendingCount = orders.filter((o) => o.payment_status === "pending").length;
+
+  return (
+    <div className="rounded-xl overflow-hidden border border-surface-border bg-surface-card">
+
+      {/* Vehicle header */}
+      <div className="flex items-center gap-3 px-3 pt-3 pb-2.5 border-b border-surface-border/60">
+        <PlateVisual plate={rep.vehicle_plate} size="sm" />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-bold text-slate-200 truncate leading-snug">
+            <Highlight text={`${rep.vehicle_brand} ${rep.vehicle_model}`} query={search} />
+          </p>
+          <p className="text-xs text-slate-400 truncate leading-snug">
+            {rep.client_name
+              ? <Highlight text={rep.client_name} query={search} />
+              : <span className="text-slate-600 italic">Sin cliente</span>}
+          </p>
+        </div>
+        {/* Pending payment indicator */}
+        {pendingCount > 0 && (
+          <div className="flex-shrink-0 flex items-center gap-1 px-2 py-0.5 rounded-full bg-orange-500/10 border border-orange-500/30">
+            <span className="w-1.5 h-1.5 rounded-full bg-orange-400" />
+            <span className="text-[10px] font-bold text-orange-400">
+              {pendingCount > 1 ? `${pendingCount} pendientes` : "Pendiente"}
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Order rows */}
+      <div className="flex flex-col divide-y divide-surface-border/40">
         {orders.map((order) => (
-          <HistoryCard
+          <OrderRow
             key={order.id}
             order={order}
             search={search}
@@ -328,85 +379,85 @@ function MonthSection({
   );
 }
 
-// ── History card ─────────────────────────────────────────────────────────────
+// ── Order row (inside a vehicle group) ───────────────────────────────────────
 
-function HistoryCard({
+function OrderRow({
   order, search, onPress,
 }: {
   order: WorkOrderDetail;
   search: string;
   onPress: () => void;
 }) {
-  const cfg  = getStatusConfig(order.status);
-  const date = new Date(order.received_at);
-  const dayLabel = date.toLocaleDateString("es-AR", { day: "numeric", month: "short" });
-
-  const isLive = (ACTIVE_STATUSES as string[]).includes(order.status);
+  const cfg      = getStatusConfig(order.status);
+  const isLive   = (ACTIVE_STATUSES as string[]).includes(order.status);
+  const dayLabel = new Date(order.received_at).toLocaleDateString("es-AR", { day: "numeric", month: "short" });
 
   return (
     <button
       onClick={onPress}
-      className={`w-full text-left rounded-xl overflow-hidden border border-surface-border
-                  border-l-[3px] ${cfg.borderColor}
-                  bg-surface-card hover:bg-surface-raised
-                  transition-all active:scale-[0.99] touch-feedback`}
+      className="w-full text-left flex items-center gap-2.5 px-3 py-2.5
+                 hover:bg-surface-raised transition-colors active:scale-[0.99]"
     >
-      <div className="flex items-center gap-3 px-3 pt-3 pb-2.5">
+      {/* Status color dot */}
+      <span className={`w-2 h-2 rounded-full flex-shrink-0 ${cfg.dotColor} ${isLive ? "animate-pulse" : ""}`} />
 
-        {/* Plate */}
-        <PlateVisual plate={order.vehicle_plate} size="sm" />
+      {/* OT number */}
+      <span className="font-mono text-[11px] text-slate-500 flex-shrink-0 w-28 truncate">
+        <Highlight text={order.order_number ?? ""} query={search} />
+      </span>
 
-        {/* Main info */}
-        <div className="flex-1 min-w-0">
+      {/* Mechanic */}
+      {order.assigned_user_name && (
+        <span className="text-[11px] text-slate-500 flex-shrink-0 truncate max-w-[4rem]">
+          <Highlight text={order.assigned_user_name.split(" ")[0]} query={search} />
+        </span>
+      )}
 
-          {/* Row 1: vehicle + badge */}
-          <div className="flex items-start justify-between gap-2">
-            <p className="text-sm font-bold text-slate-200 truncate leading-snug">
-              <Highlight text={`${order.vehicle_brand} ${order.vehicle_model}`} query={search} />
-            </p>
-            {/* Status badge */}
-            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border flex-shrink-0
-                              text-[10px] font-bold ${cfg.bgColor} ${cfg.textColor} ${cfg.borderColor}`}>
-              <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${cfg.dotColor} ${isLive ? "animate-pulse" : ""}`} />
-              {cfg.shortLabel}
-            </span>
-          </div>
+      <div className="flex-1" />
 
-          {/* Row 2: client */}
-          <p className="text-xs text-slate-400 truncate leading-snug mt-0.5">
-            {order.client_name
-              ? <Highlight text={order.client_name} query={search} />
-              : <span className="text-slate-600 italic">Sin cliente</span>}
-          </p>
+      {/* Payment badge */}
+      <PaymentBadge status={order.payment_status} />
 
-          {/* Row 3: meta info */}
-          <div className="flex items-center justify-between mt-1.5 gap-2">
-            <div className="flex items-center gap-2 min-w-0">
-              {/* Mechanic */}
-              {order.assigned_user_name && (
-                <span className="flex items-center gap-1 text-[10px] text-slate-500 flex-shrink-0">
-                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round"
-                      d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
-                  </svg>
-                  <Highlight
-                    text={order.assigned_user_name.split(" ")[0]}
-                    query={search}
-                  />
-                </span>
-              )}
-              {/* OT number */}
-              <span className="font-mono text-[10px] text-slate-700 truncate">
-                <Highlight text={order.order_number ?? ""} query={search} />
-              </span>
-            </div>
+      {/* Status badge */}
+      <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full border flex-shrink-0
+                        text-[10px] font-bold ${cfg.bgColor} ${cfg.textColor} ${cfg.borderColor}`}>
+        {cfg.shortLabel}
+      </span>
 
-            {/* Right: date */}
-            <span className="text-[10px] text-slate-600 flex-shrink-0">{dayLabel}</span>
-          </div>
-        </div>
-      </div>
+      {/* Date */}
+      <span className="text-[10px] text-slate-600 flex-shrink-0 w-10 text-right">{dayLabel}</span>
     </button>
+  );
+}
+
+// ── Payment badge ─────────────────────────────────────────────────────────────
+
+function PaymentBadge({ status }: { status: PaymentStatus }) {
+  if (status === "paid") {
+    return (
+      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full flex-shrink-0
+                       text-[10px] font-bold bg-green-500/10 text-green-400 border border-green-500/25">
+        <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+        </svg>
+        Cobrado
+      </span>
+    );
+  }
+  if (status === "partial") {
+    return (
+      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full flex-shrink-0
+                       text-[10px] font-bold bg-yellow-500/10 text-yellow-400 border border-yellow-500/25">
+        Parcial
+      </span>
+    );
+  }
+  // pending
+  return (
+    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full flex-shrink-0
+                     text-[10px] font-bold bg-orange-500/10 text-orange-400 border border-orange-500/25">
+      $ Pendiente
+    </span>
   );
 }
 
@@ -462,15 +513,17 @@ function MechanicChip({
 function LoadingSkeleton() {
   return (
     <div className="flex flex-col gap-2 p-4 pt-3">
-      {/* Stats strip skeleton */}
       <div className="grid grid-cols-4 gap-2 mb-2">
         {[1, 2, 3, 4].map((i) => (
           <div key={i} className="h-14 bg-surface-card rounded-xl animate-pulse border border-surface-border" />
         ))}
       </div>
-      {/* Card skeletons */}
-      {[1, 2, 3, 4, 5].map((i) => (
-        <div key={i} className="h-[4.5rem] bg-surface-card rounded-xl animate-pulse border border-surface-border border-l-[3px] border-l-slate-700" />
+      {[1, 2, 3].map((i) => (
+        <div key={i} className="rounded-xl border border-surface-border overflow-hidden">
+          <div className="h-14 bg-surface-card animate-pulse border-b border-surface-border" />
+          <div className="h-10 bg-surface-card/60 animate-pulse" />
+          <div className="h-10 bg-surface-card/60 animate-pulse border-t border-surface-border/40" />
+        </div>
       ))}
     </div>
   );
