@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { AppShell } from "../../components/layout/AppShell";
 import { useAuthStore } from "../../store/auth.store";
@@ -58,7 +59,7 @@ export function Profile() {
           </p>
           <div className="bg-surface-card rounded-2xl border border-surface-border divide-y divide-surface-border">
             <InfoRow label="Nombre" value={user.tenantName} />
-            <InfoRow label="ID de taller" value={user.tenantId.slice(0, 8) + "…"} mono />
+            <CopyRow label="ID de taller" display={user.tenantId.slice(0, 8) + "…"} fullValue={user.tenantId} />
           </div>
         </section>
 
@@ -145,6 +146,48 @@ function InfoRow({ label, value, mono }: { label: string; value: string; mono?: 
       <span className={`text-sm text-slate-200 font-medium truncate max-w-[60%] text-right ${mono ? "font-mono" : ""}`}>
         {value}
       </span>
+    </div>
+  );
+}
+
+// Inline copy icon SVG
+function IconCopy({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+      <path strokeLinecap="round" strokeLinejoin="round"
+        d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+    </svg>
+  );
+}
+
+function CopyRow({ label, display, fullValue }: { label: string; display: string; fullValue: string }) {
+  const [copied, setCopied] = useState(false);
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(fullValue);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch { /* clipboard unavailable */ }
+  }
+
+  return (
+    <div className="flex items-center justify-between gap-3 px-4 py-3">
+      <span className="text-sm text-slate-400">{label}</span>
+      <button
+        onClick={handleCopy}
+        className="flex items-center gap-1.5 group"
+        title="Copiar ID completo"
+      >
+        <span className="text-sm text-slate-200 font-mono">{display}</span>
+        {copied ? (
+          <span className="text-[11px] font-semibold text-green-400 transition-all">
+            ¡Copiado!
+          </span>
+        ) : (
+          <IconCopy className="w-3.5 h-3.5 text-slate-600 group-hover:text-brand transition-colors" />
+        )}
+      </button>
     </div>
   );
 }
