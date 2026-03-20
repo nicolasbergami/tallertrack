@@ -70,6 +70,7 @@ export function DiagnosisPanel({ order, onSent }: Props) {
   const [method,      setMethod]      = useState<Method>("voice");
   const [step,        setStep]        = useState<Step>("input");
   const [isRecording, setIsRecording] = useState(false);
+  const [isRetrying,  setIsRetrying]  = useState(false);
   const [transcript,  setTranscript]  = useState("");
   const [interim,     setInterim]     = useState("");
   const [voiceError,  setVoiceError]  = useState<string | null>(null);
@@ -80,12 +81,15 @@ export function DiagnosisPanel({ order, onSent }: Props) {
   const [notes,       setNotes]       = useState("");
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const recognitionRef  = useRef<any>(null);
-  const finalRef        = useRef("");
-  const isRecordingRef  = useRef(false);
-  const hasErrorRef     = useRef(false);   // prevents onend restart loop after an error
-  const timerRef        = useRef<ReturnType<typeof setInterval> | null>(null);
-  const procRef         = useRef<ReturnType<typeof setInterval> | null>(null);
+  const recognitionRef         = useRef<any>(null);
+  const finalRef               = useRef("");
+  const isRecordingRef         = useRef(false);
+  const hasErrorRef            = useRef(false);   // prevents onend restart loop after an error
+  const retryCountRef          = useRef(0);        // auto-retry counter for network errors
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const startRecordingRef      = useRef<(isAutoRetry?: boolean) => void>(() => {});
+  const timerRef               = useRef<ReturnType<typeof setInterval> | null>(null);
+  const procRef                = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const SR = typeof window !== "undefined"
     ? (window.SpeechRecognition || window.webkitSpeechRecognition)
@@ -160,6 +164,7 @@ export function DiagnosisPanel({ order, onSent }: Props) {
     recognitionRef.current?.stop();
     if (timerRef.current) clearInterval(timerRef.current);
     setIsRecording(false);
+    setIsRetrying(false);
     setInterim("");
     if (autoSubmit) {
       const text = finalRef.current.trim();
@@ -168,12 +173,14 @@ export function DiagnosisPanel({ order, onSent }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const startRecording = useCallback(() => {
+  const startRecording = useCallback((isAutoRetry = false) => {
     if (!SR) return;
-    finalRef.current    = "";
-    hasErrorRef.current = false;
+    if (!isAutoRetry) retryCountRef.current = 0;
+    finalRef.current       = "";
+    hasErrorRef.current    = false;
     isRecordingRef.current = true;
-    setTranscript(""); setInterim(""); setSeconds(0); setVoiceError(null); setIsRecording(true);
+    setTranscript(""); setInterim(""); setSeconds(0); setVoiceError(null);
+    setIsRecording(true); setIsRetrying(false);
 
     const rec = new SR();
     rec.continuous     = true;
@@ -192,17 +199,30 @@ export function DiagnosisPanel({ order, onSent }: Props) {
     };
 
     rec.onerror = (e) => {
-      if (e.error === "not-allowed") {
+      if (e.error === "network") {
+        // Transient — auto-retry once silently before showing an error
+        if (retryCountRef.current < 1) {
+          retryCountRef.current++;
+          isRecordingRef.current = false;
+          hasErrorRef.current    = false; // allow the retry
+          if (timerRef.current) clearInterval(timerRef.current);
+          setIsRecording(false);
+          setIsRetrying(true);
+          setTimeout(() => startRecordingRef.current(true), 900);
+          return;
+        }
+        // Second failure — give up and suggest manual mode
+        setVoiceError("El micrófono no pudo conectar. Usá el modo ⌨️ Manual para cargar el presupuesto.");
+      } else if (e.error === "not-allowed") {
         setVoiceError("Permiso de micrófono denegado. Habilítalo en la configuración del navegador.");
-      } else if (e.error === "network") {
-        setVoiceError("Sin conexión con el servidor de voz. Verificá tu conexión a internet e intentá de nuevo.");
       } else if (e.error !== "no-speech") {
         setVoiceError(`Error de reconocimiento: ${e.error}. Intentá de nuevo.`);
       }
-      hasErrorRef.current    = true;   // prevent onend from restarting
+      hasErrorRef.current    = true;
       isRecordingRef.current = false;
       if (timerRef.current) clearInterval(timerRef.current);
       setIsRecording(false);
+      setIsRetrying(false);
     };
 
     rec.onend = () => {
@@ -225,6 +245,9 @@ export function DiagnosisPanel({ order, onSent }: Props) {
       });
     }, 1000);
   }, [SR, stopRecording]);
+
+  // Keep ref in sync so onerror can call startRecording without a circular dep
+  useEffect(() => { startRecordingRef.current = startRecording; }, [startRecording]);
 
   // ── Item helpers ─────────────────────────────────────────────────────────
 
@@ -563,36 +586,51 @@ export function DiagnosisPanel({ order, onSent }: Props) {
                 </div>
               )}
 
-              {/* Big circular mic button */}
-              <button
-                onClick={() => isRecording ? stopRecording(true) : startRecording()}
-                className={`w-24 h-24 rounded-full flex items-center justify-center border-4
-                            transition-all duration-200 active:scale-95
-                            ${isRecording
-                              ? "bg-red-600/30 border-red-500 shadow-[0_0_40px_rgba(239,68,68,0.4)]"
-                              : "bg-brand/20 border-brand shadow-[0_0_30px_rgba(249,115,22,0.25)] hover:bg-brand/30"
-                            }`}
-              >
-                {isRecording ? (
-                  <svg className="w-8 h-8 text-red-400" fill="currentColor" viewBox="0 0 24 24">
-                    <rect x="6" y="6" width="12" height="12" rx="2" />
+              {/* Big circular mic button / retrying spinner */}
+              {isRetrying ? (
+                <div className="w-24 h-24 rounded-full flex items-center justify-center border-4
+                                border-slate-600 bg-surface-raised">
+                  <svg className="animate-spin w-9 h-9 text-slate-400" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10"
+                            stroke="currentColor" strokeWidth="4"/>
+                    <path className="opacity-75" fill="currentColor"
+                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
                   </svg>
-                ) : (
-                  <svg className="w-9 h-9 text-brand" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
-                    <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
-                  </svg>
-                )}
-              </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => isRecording ? stopRecording(true) : startRecording()}
+                  className={`w-24 h-24 rounded-full flex items-center justify-center border-4
+                              transition-all duration-200 active:scale-95
+                              ${isRecording
+                                ? "bg-red-600/30 border-red-500 shadow-[0_0_40px_rgba(239,68,68,0.4)]"
+                                : "bg-brand/20 border-brand shadow-[0_0_30px_rgba(249,115,22,0.25)] hover:bg-brand/30"
+                              }`}
+                >
+                  {isRecording ? (
+                    <svg className="w-8 h-8 text-red-400" fill="currentColor" viewBox="0 0 24 24">
+                      <rect x="6" y="6" width="12" height="12" rx="2" />
+                    </svg>
+                  ) : (
+                    <svg className="w-9 h-9 text-brand" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+                      <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+                    </svg>
+                  )}
+                </button>
+              )}
 
               <p className={`text-sm font-semibold transition-colors ${
-                isRecording ? "text-red-400" : "text-slate-500"
+                isRetrying  ? "text-slate-500" :
+                isRecording ? "text-red-400"   : "text-slate-500"
               }`}>
-                {isRecording ? "Grabando… toca para detener y analizar" : "Toca para grabar el diagnóstico"}
+                {isRetrying  ? "Reconectando…" :
+                 isRecording ? "Grabando… toca para detener y analizar" :
+                               "Toca para grabar el diagnóstico"}
               </p>
 
-              {/* Cancel button — always visible while recording so mobile can escape */}
-              {isRecording && (
+              {/* Cancel button — always visible while recording so mobile can always escape */}
+              {(isRecording || isRetrying) && (
                 <button
                   onClick={() => stopRecording(false)}
                   className="w-full h-11 rounded-xl border border-red-800/60 bg-red-950/30
@@ -626,8 +664,15 @@ export function DiagnosisPanel({ order, onSent }: Props) {
           )}
 
           {voiceError && (
-            <div className="rounded-xl bg-red-950/40 border border-red-800/50 px-4 py-3 w-full">
+            <div className="rounded-xl bg-red-950/40 border border-red-800/50 px-4 py-3 w-full flex flex-col gap-2">
               <p className="text-red-400 text-sm">{voiceError}</p>
+              <button
+                onClick={() => { setMethod("manual"); setVoiceError(null); }}
+                className="w-full h-10 rounded-xl bg-surface-raised border border-surface-border
+                           text-slate-300 text-sm font-semibold transition-colors"
+              >
+                ⌨️ Cambiar a modo manual
+              </button>
             </div>
           )}
         </div>
