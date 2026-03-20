@@ -143,12 +143,16 @@ export const sessionManager = {
       auth:              state,
       printQRInTerminal: false,
       browser:           ["TallerTrack", "Chrome", "1.0.0"],
-      logger: {
-        level:  "silent",
-        child:  () => ({} as never),
-        trace:  () => {}, debug: () => {}, info:  () => {},
-        warn:   () => {}, error: () => {}, fatal: () => {},
-      } as never,
+      logger: (() => {
+        const noop = () => {};
+        const logger: Record<string, unknown> = {
+          level: "silent",
+          trace: noop, debug: noop, info: noop,
+          warn:  noop, error: noop, fatal: noop,
+        };
+        logger.child = () => logger;
+        return logger;
+      })() as never,
     });
 
     console.log(`[WhatsApp] Socket created, waiting for QR for tenant ${tenantId}`);
