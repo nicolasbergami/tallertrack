@@ -22,6 +22,9 @@ const envSchema = z.object({
   // AI features (Anthropic Claude)
   ANTHROPIC_API_KEY: z.string().optional().default(""),
 
+  // AI features (OpenAI — Whisper transcription)
+  OPENAI_API_KEY: z.string().optional().default(""),
+
   // Billing — Mercado Pago
   MP_ACCESS_TOKEN:   z.string().optional().default(""),
   MP_WEBHOOK_SECRET: z.string().optional().default(""),

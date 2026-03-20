@@ -39,6 +39,17 @@ export const STATUS_CONFIG: Record<WorkOrderStatus, StatusConfig> = {
     ringColor:   "ring-sky-500",
     step: 2,
   },
+  awaiting_approval: {
+    label:       "Esperando aprobación",
+    shortLabel:  "Aprobación",
+    emoji:       "📋",
+    bgColor:     "bg-violet-950/60",
+    textColor:   "text-violet-300",
+    dotColor:    "bg-violet-400",
+    borderColor: "border-violet-500",
+    ringColor:   "ring-violet-500",
+    step: 3,
+  },
   awaiting_parts: {
     label:       "Esperando repuestos",
     shortLabel:  "Repuestos",
@@ -109,22 +120,23 @@ export const STATUS_CONFIG: Record<WorkOrderStatus, StatusConfig> = {
 
 // Valid forward transitions (mirrors backend state machine)
 export const NEXT_STATES: Partial<Record<WorkOrderStatus, WorkOrderStatus[]>> = {
-  received:        ["diagnosing"],
-  diagnosing:      ["awaiting_parts", "in_progress"],
-  awaiting_parts:  ["in_progress"],
-  in_progress:     ["quality_control"],
-  quality_control: ["ready", "in_progress"],
-  ready:           ["delivered"],
+  received:          ["diagnosing"],
+  diagnosing:        [],              // advance via DiagnosisPanel (send quote → auto to awaiting_approval)
+  awaiting_approval: [],              // client must approve via link — mechanic cannot advance manually
+  awaiting_parts:    ["in_progress"],
+  in_progress:       ["quality_control"],
+  quality_control:   ["ready", "in_progress"],
+  ready:             ["delivered"],
 };
 
 // States that can be cancelled
 export const CANCELLABLE: WorkOrderStatus[] = [
-  "received", "diagnosing", "awaiting_parts", "in_progress", "quality_control", "ready",
+  "received", "diagnosing", "awaiting_approval", "awaiting_parts", "in_progress", "quality_control", "ready",
 ];
 
 // Active states (visible on Dashboard kanban by default)
 export const ACTIVE_STATUSES: WorkOrderStatus[] = [
-  "received", "diagnosing", "awaiting_parts", "in_progress", "quality_control", "ready",
+  "received", "diagnosing", "awaiting_approval", "awaiting_parts", "in_progress", "quality_control", "ready",
 ];
 
 export function getStatusConfig(status: WorkOrderStatus): StatusConfig {

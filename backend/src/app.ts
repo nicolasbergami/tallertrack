@@ -9,6 +9,7 @@ import { requireActiveSubscription } from "./middleware/subscription.middleware"
 import authRoutes       from "./modules/auth/auth.routes";
 import workOrderRoutes  from "./modules/work-orders/work-order.routes";
 import publicRoutes     from "./modules/public/public.routes";
+import orderApprovalRoutes from "./modules/public/orders.routes";
 import aiRoutes         from "./modules/ai/ai.routes";
 import onboardingRoutes from "./modules/onboarding/onboarding.routes";
 import whatsappRoutes   from "./modules/whatsapp/whatsapp.routes";
@@ -60,6 +61,7 @@ app.get("/health", (_req, res) => {
 // ---------------------------------------------------------------------------
 app.use("/api/v1/auth",        authRoutes);
 app.use("/api/v1/public",      publicRoutes);       // public — tracking
+app.use("/api/orders",         orderApprovalRoutes); // public — one-click client approval
 app.use("/api/v1/onboarding",  onboardingRoutes);   // public — registration
 app.use("/api/v1/billing",     billingRoutes);       // mixed — webhook public, rest protected
 

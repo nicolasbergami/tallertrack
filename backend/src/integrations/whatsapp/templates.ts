@@ -11,6 +11,10 @@ export interface MessageContext {
   workshopPhone?: string;
   diagnosis?: string;
   estimatedDelivery?: string;
+  // Quote approval flow
+  resumenCliente?: string;  // AI-generated client-friendly diagnosis summary
+  approveUrl?: string;      // One-click approval link
+  rejectUrl?: string;       // One-click rejection link
 }
 
 export interface WhatsAppMessage {
@@ -38,6 +42,18 @@ const STATUS_TEMPLATES: Partial<Record<WorkOrderStatus, TemplateFactory>> = {
     `📋 Orden N°: ${ctx.orderNumber}\n` +
     `Te avisaremos tan pronto tengamos el presupuesto listo.\n\n` +
     `Seguimiento en tiempo real: ${ctx.trackingUrl}`,
+
+  awaiting_approval: (ctx) =>
+    `📋 *Presupuesto listo para tu revisión — ${ctx.workshopName}*\n\n` +
+    (ctx.resumenCliente
+      ? `🔍 *Diagnóstico del mecánico:*\n${ctx.resumenCliente}\n\n`
+      : "") +
+    `🚗 Vehículo: *${ctx.vehicleBrand} ${ctx.vehicleModel}* (${ctx.vehiclePlate})\n` +
+    `🗂️ Orden N°: ${ctx.orderNumber}\n\n` +
+    `Por favor revisa el presupuesto y responde:\n\n` +
+    `✅ *Aprobar reparación:*\n${ctx.approveUrl ?? ctx.trackingUrl}\n\n` +
+    `❌ *Rechazar presupuesto:*\n${ctx.rejectUrl ?? ctx.trackingUrl}\n\n` +
+    `Ver detalle completo: ${ctx.trackingUrl}`,
 
   awaiting_parts: (ctx) =>
     `⏳ Hola ${ctx.clientName}, hemos completado el diagnóstico de tu *${ctx.vehicleBrand} ${ctx.vehicleModel}*.\n\n` +

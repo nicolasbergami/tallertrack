@@ -3,6 +3,7 @@
 export const WORK_ORDER_STATUSES = [
   "received",
   "diagnosing",
+  "awaiting_approval",
   "awaiting_parts",
   "in_progress",
   "quality_control",

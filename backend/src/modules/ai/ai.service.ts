@@ -1,6 +1,17 @@
+import { toFile } from "openai";
 import { anthropic } from "../../integrations/ai/claude.client";
+import { openai }    from "../../integrations/ai/openai.client";
 import { withTenantContext }   from "../../config/database";
-import { AiQuoteDraft, DeliveryPrediction } from "./ai.types";
+import { AiQuoteDraft, DeliveryPrediction, VoiceDiagnosisItem, VoiceDiagnosisResult } from "./ai.types";
+
+// ---------------------------------------------------------------------------
+// Internal tool-input types (used for TypeScript casting only)
+// ---------------------------------------------------------------------------
+
+interface DiagnosisToolInput {
+  items: { descripcion: string; tipo: string; precio_estimado: number }[];
+  resumen_cliente: string;
+}
 
 // ---------------------------------------------------------------------------
 // Tool input schemas (mirrored here for TypeScript casting)
@@ -234,6 +245,107 @@ Considera que el taller trabaja ~8 horas por día. Sé realista y conservador.`,
       confidence:               result.confidence,
       reasoning:                result.reasoning,
       similar_orders_analyzed:  result.similar_orders_analyzed,
+    };
+  },
+
+  /**
+   * Receives an audio buffer from the mechanic's device, transcribes it with
+   * OpenAI Whisper, then uses Claude Haiku to extract structured diagnosis
+   * items and a client-friendly summary.
+   */
+  async voiceDiagnosis(
+    audioBuffer: Buffer,
+    mimeType: string,
+    originalName: string,
+  ): Promise<VoiceDiagnosisResult> {
+
+    // ── Step 1: Transcribe with Whisper ─────────────────────────────────────
+    const audioFile = await toFile(audioBuffer, originalName, { type: mimeType });
+
+    const transcription = await openai.audio.transcriptions.create({
+      file:     audioFile,
+      model:    "whisper-1",
+      language: "es",
+    });
+
+    const transcript = transcription.text.trim();
+    if (!transcript) {
+      throw new Error("No se pudo transcribir el audio. Intenta grabar de nuevo con más claridad.");
+    }
+
+    // ── Step 2: Analyze with Claude Haiku ───────────────────────────────────
+    const response = await anthropic.messages.create({
+      model:      "claude-3-5-haiku-20241022",
+      max_tokens: 1024,
+      system: `Eres un asistente de taller mecánico. Recibirás una transcripción cruda del mecánico.
+Debes usar la herramienta save_diagnosis para devolver un resultado estructurado con:
+1. items: lista de trabajos/repuestos mencionados, con tipo (repuesto o mano_obra) y precio estimado en CLP.
+2. resumen_cliente: párrafo corto, empático y sin jerga ultra-técnica explicando el problema del vehículo.`,
+      tools: [
+        {
+          name: "save_diagnosis",
+          description: "Guarda el diagnóstico estructurado extraído del audio del mecánico",
+          input_schema: {
+            type: "object",
+            properties: {
+              items: {
+                type: "array",
+                description: "Ítems de trabajo o repuestos identificados",
+                items: {
+                  type: "object",
+                  properties: {
+                    descripcion: {
+                      type: "string",
+                      description: "Descripción del repuesto o trabajo",
+                    },
+                    tipo: {
+                      type: "string",
+                      enum: ["repuesto", "mano_obra"],
+                      description: "Tipo de ítem",
+                    },
+                    precio_estimado: {
+                      type: "number",
+                      description: "Precio estimado en CLP. Usa 0 si no puedes estimar.",
+                    },
+                  },
+                  required: ["descripcion", "tipo", "precio_estimado"],
+                  additionalProperties: false,
+                },
+              },
+              resumen_cliente: {
+                type: "string",
+                description: "Párrafo corto, empático y sin jerga técnica explicando el problema al cliente",
+              },
+            },
+            required: ["items", "resumen_cliente"],
+            additionalProperties: false,
+          },
+        },
+      ],
+      tool_choice: { type: "tool", name: "save_diagnosis" },
+      messages: [
+        {
+          role:    "user",
+          content: `Transcripción del mecánico:\n"${transcript}"`,
+        },
+      ],
+    });
+
+    const toolUse = response.content.find((b) => b.type === "tool_use");
+    if (!toolUse || toolUse.type !== "tool_use") {
+      throw new Error("El servicio de IA no pudo analizar la transcripción");
+    }
+
+    const input = toolUse.input as DiagnosisToolInput;
+
+    return {
+      transcripcion:   transcript,
+      resumen_cliente: input.resumen_cliente,
+      items:           input.items.map((i) => ({
+        descripcion:     i.descripcion,
+        tipo:            i.tipo as VoiceDiagnosisItem["tipo"],
+        precio_estimado: i.precio_estimado,
+      })),
     };
   },
 };

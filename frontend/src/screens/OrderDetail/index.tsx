@@ -4,14 +4,16 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppShell } from "../../components/layout/AppShell";
 import { ActionBar } from "./ActionBar";
 import { AiQuoteModal } from "./AiQuoteModal";
+import { DiagnosisPanel } from "./DiagnosisPanel";
 import { PaymentModal } from "./PaymentModal";
 import { workOrdersApi } from "../../api/work-orders.api";
 import { getStatusConfig, formatElapsed } from "../../config/status.config";
 import { IconWrench, IconQr, IconDownload, IconPhone } from "../../components/ui/Icons";
 import { PAYMENT_METHOD_LABELS } from "../../types/work-order";
 
-// Statuses where a mechanic can dictate a quote
-const AI_QUOTE_STATUSES = ["diagnosing", "awaiting_parts", "in_progress"] as const;
+// Statuses where the floating "Presupuesto IA" header button is shown
+// (diagnosing uses the inline DiagnosisPanel instead)
+const AI_QUOTE_STATUSES = ["awaiting_parts", "in_progress"] as const;
 
 // Inline icon — calendar (not in central library)
 function IconCalendar({ className = "w-4 h-4" }: { className?: string }) {
@@ -217,6 +219,14 @@ export function OrderDetail() {
           </h3>
           <p className="text-slate-200 text-base leading-relaxed">{order.complaint}</p>
         </section>
+
+        {/* ── Diagnosis Panel (inline module, diagnosing only) ──────────────── */}
+        {order.status === "diagnosing" && (
+          <DiagnosisPanel
+            order={order}
+            onSent={() => qc.invalidateQueries({ queryKey: ["work-order", id] })}
+          />
+        )}
 
         {/* ── Diagnosis ────────────────────────────────────────────────────── */}
         {order.diagnosis && (

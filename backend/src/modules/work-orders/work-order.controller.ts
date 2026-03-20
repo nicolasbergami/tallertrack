@@ -23,8 +23,9 @@ const quoteItemSchema = z.object({
 });
 
 const createQuoteSchema = z.object({
-  items: z.array(quoteItemSchema).min(1, "El presupuesto debe tener al menos 1 ítem"),
-  notes: z.string().optional(),
+  items:           z.array(quoteItemSchema).min(1, "El presupuesto debe tener al menos 1 ítem"),
+  notes:           z.string().optional(),
+  resumen_cliente: z.string().optional(), // AI-generated summary for WhatsApp approval message
 });
 
 // ---------------------------------------------------------------------------
@@ -209,17 +210,21 @@ export const workOrderController = {
   },
 
   // POST /work-orders/:id/quotes — save AI-generated quote draft
+  // If order is in 'diagnosing': auto-transitions to awaiting_approval + sends WhatsApp
   async createQuote(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const raw   = createQuoteSchema.parse(req.body);
+      const raw = createQuoteSchema.parse(req.body);
       const dto: CreateQuoteDTO = {
-        notes: raw.notes,
-        items: (raw.items as unknown as CreateQuoteItemDTO[]),
+        notes:           raw.notes,
+        resumen_cliente: raw.resumen_cliente,
+        items:           raw.items as unknown as CreateQuoteItemDTO[],
       };
       const quote = await workOrderService.createQuote(
         req.user.tenant_id,
         req.params.id,
         dto,
+        req.user.sub,
+        { ip: req.ip, userAgent: req.headers["user-agent"] },
       );
       res.status(201).json(quote);
     } catch (err) {

@@ -41,4 +41,32 @@ export const publicController = {
       next(err);
     }
   },
+
+  // POST /api/orders/:tenantSlug/:orderNumber/approve
+  async approveOrder(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { tenantSlug, orderNumber } = req.params;
+      const result = await publicService.approveOrder(tenantSlug, orderNumber, {
+        ip:        req.ip,
+        userAgent: req.headers["user-agent"],
+      });
+      res.json(result);
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  // POST /api/orders/:tenantSlug/:orderNumber/reject
+  async rejectOrder(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { tenantSlug, orderNumber } = req.params;
+      const result = await publicService.rejectOrder(tenantSlug, orderNumber, {
+        ip:        req.ip,
+        userAgent: req.headers["user-agent"],
+      });
+      res.json(result);
+    } catch (err) {
+      next(err);
+    }
+  },
 };

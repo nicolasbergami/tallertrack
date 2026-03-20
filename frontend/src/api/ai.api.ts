@@ -51,6 +51,6 @@ export const aiApi = {
   }) => api.post<DeliveryPrediction>("/ai/predict-delivery", params),
 
   /** Persist an AI-generated quote on a work order */
-  saveQuote: (workOrderId: string, items: SaveQuoteItem[], notes?: string) =>
-    api.post(`/work-orders/${workOrderId}/quotes`, { items, notes }),
+  saveQuote: (workOrderId: string, items: SaveQuoteItem[], notes?: string, resumen_cliente?: string) =>
+    api.post(`/work-orders/${workOrderId}/quotes`, { items, notes, resumen_cliente }),
 };

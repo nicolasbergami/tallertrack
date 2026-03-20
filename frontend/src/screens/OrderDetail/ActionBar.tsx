@@ -80,6 +80,67 @@ export function ActionBar({ order }: Props) {
     );
   }
 
+  // ── Awaiting client approval ──────────────────────────────────────────────
+  if (order.status === "awaiting_approval") {
+    return (
+      <div className="bg-surface border-t border-surface-border px-4 pt-3 pb-4 flex flex-col gap-3">
+        <div className="flex items-center justify-between">
+          {whatsappUrl ? (
+            <a
+              href={whatsappUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 h-9 px-3 rounded-xl
+                         bg-green-950/50 border border-green-800/60
+                         text-green-400 text-sm font-semibold hover:bg-green-950 transition-colors"
+            >
+              <IconWhatsapp className="w-4 h-4" />
+              WhatsApp
+            </a>
+          ) : <div />}
+          {!showCancelConfirm && (
+            <button
+              onClick={() => setShowCancelConfirm(true)}
+              className="h-9 px-3 rounded-xl text-red-400/60 text-sm font-semibold
+                         hover:text-red-400 hover:bg-red-950/30 transition-colors"
+            >
+              Cancelar OT
+            </button>
+          )}
+        </div>
+        {showCancelConfirm && (
+          <div className="bg-red-950/60 border border-red-800 rounded-2xl p-4 flex flex-col gap-3">
+            <p className="text-red-300 font-semibold text-sm">¿Confirmar cancelación de la orden?</p>
+            <div className="flex gap-2">
+              <button
+                disabled={transitionMutation.isPending}
+                onClick={() => transitionMutation.mutate("cancelled")}
+                className="flex-1 h-10 rounded-xl bg-red-700 hover:bg-red-600 text-white
+                           text-sm font-bold transition-colors disabled:opacity-50"
+              >
+                {transitionMutation.isPending ? "…" : "Sí, cancelar"}
+              </button>
+              <button
+                onClick={() => setShowCancelConfirm(false)}
+                className="h-10 px-4 rounded-xl bg-surface-raised text-slate-300 text-sm font-semibold"
+              >
+                No
+              </button>
+            </div>
+          </div>
+        )}
+        <div className="w-full rounded-2xl border border-violet-500/30 bg-violet-950/30 px-4 py-3 flex items-center gap-3">
+          <span className="text-2xl">📋</span>
+          <div className="flex flex-col">
+            <span className="text-violet-300 font-bold text-sm">Esperando aprobación del cliente</span>
+            <span className="text-violet-400/60 text-xs">El cliente debe aprobar el presupuesto por WhatsApp</span>
+          </div>
+          <span className="ml-auto w-2 h-2 rounded-full bg-violet-400 animate-pulse flex-shrink-0" />
+        </div>
+      </div>
+    );
+  }
+
   // ── Active state ──────────────────────────────────────────────────────────
   return (
     <>

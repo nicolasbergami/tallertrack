@@ -1,6 +1,7 @@
 import { pool, withTenantContext, withTenantTransaction } from "../../config/database";
 import { createHttpError } from "../../middleware/error.middleware";
 import { historyLogRepository } from "../../shared/history-log.repository";
+import { workOrderService } from "../work-orders/work-order.service";
 import {
   PublicOrderData, PublicQuote, PublicQuoteItem,
   PublicHistoryEntry, QuoteResponseDTO,
@@ -239,5 +240,54 @@ export const publicService = {
         approved_at: approvedAt,
       };
     });
+  },
+
+  // ── One-click approval — finds the latest sent quote automatically ──────
+  // Called from: POST /api/orders/:tenantSlug/:orderNumber/approve
+  async approveOrder(
+    tenantSlug: string,
+    orderNumber: string,
+    meta: { ip?: string; userAgent?: string },
+  ): Promise<{ message: string }> {
+    const tenant = await findTenantId(tenantSlug);
+
+    // Resolve work order ID within tenant context (RLS scoped)
+    const workOrderId = await withTenantContext(tenant.id, async (client) => {
+      const { rows } = await client.query<{ id: string }>(
+        `SELECT id FROM work_orders
+          WHERE order_number = $1 AND tenant_id = $2 AND deleted_at IS NULL`,
+        [orderNumber, tenant.id],
+      );
+      if (!rows[0]) throw createHttpError(404, "Orden de trabajo no encontrada.");
+      return rows[0].id;
+    });
+
+    await workOrderService.approveByClient(tenant.id, workOrderId, meta);
+
+    return { message: "Presupuesto aprobado. El taller comenzará la reparación a la brevedad." };
+  },
+
+  // ── One-click rejection ─────────────────────────────────────────────────
+  // Called from: POST /api/orders/:tenantSlug/:orderNumber/reject
+  async rejectOrder(
+    tenantSlug: string,
+    orderNumber: string,
+    meta: { ip?: string; userAgent?: string },
+  ): Promise<{ message: string }> {
+    const tenant = await findTenantId(tenantSlug);
+
+    const workOrderId = await withTenantContext(tenant.id, async (client) => {
+      const { rows } = await client.query<{ id: string }>(
+        `SELECT id FROM work_orders
+          WHERE order_number = $1 AND tenant_id = $2 AND deleted_at IS NULL`,
+        [orderNumber, tenant.id],
+      );
+      if (!rows[0]) throw createHttpError(404, "Orden de trabajo no encontrada.");
+      return rows[0].id;
+    });
+
+    await workOrderService.rejectByClient(tenant.id, workOrderId, meta);
+
+    return { message: "Presupuesto rechazado. El taller ha sido notificado." };
   },
 };

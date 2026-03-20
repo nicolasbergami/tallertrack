@@ -39,4 +39,23 @@ export const aiController = {
       next(err);
     }
   },
+
+  async voiceDiagnosis(req: Request, res: Response, next: NextFunction) {
+    try {
+      const file = req.file;
+      if (!file) {
+        res.status(400).json({ message: "Se requiere un archivo de audio (campo: audio)" });
+        return;
+      }
+
+      const result = await aiService.voiceDiagnosis(
+        file.buffer,
+        file.mimetype,
+        file.originalname || "audio.webm",
+      );
+      res.json(result);
+    } catch (err) {
+      next(err);
+    }
+  },
 };

@@ -4,26 +4,31 @@ import { WorkOrderStatus, STATUS_LABELS } from "../work-order.types";
 // TallerTrack — Work Order State Machine
 //
 // Flujo principal:
-//   received → diagnosing → [awaiting_parts →] in_progress → quality_control → ready → delivered
+//   received → diagnosing → awaiting_approval → in_progress → quality_control → ready → delivered
 //
 // Reglas de negocio:
 //   1. El único camino es hacia adelante (excepto quality_control → in_progress si falla QC).
-//   2. No se puede saltar estados: received NO puede ir a in_progress, ready ni delivered.
+//   2. No se puede saltar estados.
 //   3. Desde cualquier estado activo se puede cancelar (excepto delivered).
 //   4. delivered y cancelled son estados terminales — no admiten transición.
+//   5. awaiting_approval → in_progress/awaiting_parts solo via endpoints públicos del cliente.
+//      El mecánico NO puede avanzar manualmente desde awaiting_approval a esos estados.
 // ---------------------------------------------------------------------------
 
 type TransitionMap = Readonly<Record<WorkOrderStatus, readonly WorkOrderStatus[]>>;
 
 export const VALID_TRANSITIONS: TransitionMap = {
-  received:        ["diagnosing", "cancelled"],
-  diagnosing:      ["awaiting_parts", "in_progress", "cancelled"], // skip parts if available
-  awaiting_parts:  ["in_progress", "cancelled"],
-  in_progress:     ["quality_control", "cancelled"],
-  quality_control: ["ready", "in_progress"],   // ← back to repair if QC fails
-  ready:           ["delivered"],
-  delivered:       [],                         // terminal
-  cancelled:       [],                         // terminal
+  received:          ["diagnosing", "cancelled"],
+  // diagnosing can only advance via quote submission (auto-transition to awaiting_approval)
+  diagnosing:        ["awaiting_approval", "cancelled"],
+  // awaiting_approval advances only via client /approve or /reject endpoints
+  awaiting_approval: ["in_progress", "awaiting_parts", "cancelled"],
+  awaiting_parts:    ["in_progress", "cancelled"],
+  in_progress:       ["quality_control", "awaiting_parts", "cancelled"],
+  quality_control:   ["ready", "in_progress"],   // ← back to repair if QC fails
+  ready:             ["delivered"],
+  delivered:         [],                         // terminal
+  cancelled:         [],                         // terminal
 };
 
 // ---------------------------------------------------------------------------
@@ -37,8 +42,14 @@ const TRANSITION_BLOCKED_REASON: Partial<Record<WorkOrderStatus, Partial<Record<
     delivered:       "La orden debe completar todos los pasos antes de ser entregada.",
   },
   diagnosing: {
-    ready:     "Debe completar la Reparación y el Control de Calidad primero.",
-    delivered: "La orden aún no ha sido reparada ni aprobada.",
+    in_progress:     "Envíe el presupuesto al cliente primero. El sistema esperará su aprobación antes de comenzar la reparación.",
+    awaiting_parts:  "Envíe el presupuesto al cliente primero. El sistema esperará su aprobación.",
+    ready:           "Debe completar la Reparación y el Control de Calidad primero.",
+    delivered:       "La orden aún no ha sido reparada ni aprobada.",
+  },
+  awaiting_approval: {
+    in_progress:     "La reparación solo puede comenzar cuando el cliente apruebe el presupuesto.",
+    awaiting_parts:  "No se puede avanzar manualmente mientras se espera aprobación del cliente.",
   },
 };
 

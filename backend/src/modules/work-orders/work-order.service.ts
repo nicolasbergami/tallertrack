@@ -153,7 +153,19 @@ export const workOrderService = {
       // 1. Fetch current state
       const current = await workOrderRepository.findById(client, workOrderId, tenantId);
 
-      // 2. Validate transition — throws TransitionError if invalid
+      // 2a. Guard: transitions OUT of awaiting_approval to in_progress or awaiting_parts
+      //     are reserved for the client via the public /approve and /reject endpoints.
+      if (
+        current.status === "awaiting_approval" &&
+        (dto.status === "in_progress" || dto.status === "awaiting_parts")
+      ) {
+        throw createHttpError(
+          403,
+          "La orden espera aprobación del cliente. La reparación comenzará automáticamente cuando el cliente apruebe el presupuesto."
+        );
+      }
+
+      // 2b. Validate transition — throws TransitionError if invalid
       WorkOrderStateMachine.assertTransition(current.status, dto.status);
 
       // 3. Persist new state
@@ -214,19 +226,77 @@ export const workOrderService = {
   },
 
   // -------------------------------------------------------------------------
-  // Create a quote (draft) for a work order from AI-generated items
+  // Create a quote for a work order.
+  // If the order is in 'diagnosing' state, the system:
+  //   1. Marks the quote as 'sent'
+  //   2. Auto-transitions the work order to 'awaiting_approval'
+  //   3. Logs the transition
+  //   4. Fires a WhatsApp message to the client with the AI summary + approval links
   // -------------------------------------------------------------------------
   async createQuote(
     tenantId: string,
     workOrderId: string,
     dto: CreateQuoteDTO,
+    userId: string,
+    requestMeta: { ip?: string; userAgent?: string },
   ): Promise<QuoteWithItems> {
-    // Verify the work order exists and belongs to this tenant
-    await this.getById(tenantId, workOrderId);
+    // Verify work order exists and load current status + client_phone
+    const workOrder = await this.getById(tenantId, workOrderId);
+    const isDiagnosing = workOrder.status === "diagnosing";
 
-    return withTenantTransaction(tenantId, (client) =>
-      workOrderRepository.createQuote(client, tenantId, workOrderId, dto),
-    );
+    const result = await withTenantTransaction(tenantId, async (client) => {
+      const quote = await workOrderRepository.createQuote(client, tenantId, workOrderId, dto);
+
+      if (isDiagnosing) {
+        // 1. Promote quote to 'sent'
+        await client.query(
+          `UPDATE quotes SET status = 'sent', updated_at = NOW() WHERE id = $1`,
+          [quote.id],
+        );
+
+        // 2. Auto-transition work order → awaiting_approval
+        await workOrderRepository.updateStatus(
+          client, workOrderId, tenantId, "awaiting_approval", {},
+        );
+
+        // 3. Immutable status-change log
+        await historyLogRepository.logStatusChange(client, {
+          tenant_id:    tenantId,
+          work_order_id: workOrderId,
+          from_status:  "diagnosing",
+          to_status:    "awaiting_approval",
+          performed_by: userId,
+          ip_address:   requestMeta.ip,
+          user_agent:   requestMeta.userAgent,
+        });
+
+        // 4. Additional log entry: quote was sent to client
+        await historyLogRepository.create(client, {
+          tenant_id:     tenantId,
+          entity_type:   "work_order",
+          entity_id:     workOrderId,
+          action:        "quote_sent_to_client",
+          new_values:    { quote_id: quote.id, quote_status: "sent" },
+          performed_by:  userId,
+          ip_address:    requestMeta.ip,
+          user_agent:    requestMeta.userAgent,
+          metadata:      { quote_total: quote.total },
+        });
+
+        return { ...quote, status: "sent" as const };
+      }
+
+      return quote;
+    });
+
+    // Fire-and-forget WhatsApp AFTER the transaction (never blocks the DB write)
+    if (isDiagnosing) {
+      this._notifyClientQuoteSent(tenantId, workOrder, dto.resumen_cliente).catch((err) =>
+        console.error("[WorkOrderService] WhatsApp quote notification failed:", err)
+      );
+    }
+
+    return result;
   },
 
   // -------------------------------------------------------------------------
@@ -266,6 +336,175 @@ export const workOrderService = {
     );
 
     return generateRemitoPdf(order, quote, tenantInfo);
+  },
+
+  // -------------------------------------------------------------------------
+  // Client approves the quote → in_progress + WhatsApp + immutable audit log
+  // Called by the public /approve endpoint (no JWT, identified by work order UUID)
+  // -------------------------------------------------------------------------
+  async approveByClient(
+    tenantId: string,
+    workOrderId: string,
+    meta: { ip?: string; userAgent?: string },
+  ): Promise<void> {
+    const updated = await withTenantTransaction(tenantId, async (client) => {
+      const workOrder = await workOrderRepository.findById(client, workOrderId, tenantId);
+
+      if (workOrder.status !== "awaiting_approval") {
+        throw createHttpError(
+          409,
+          "Esta orden no está esperando aprobación del cliente."
+        );
+      }
+
+      // Find latest sent quote
+      const { rows: quoteRows } = await client.query<{
+        id: string; total: number; quote_number: string;
+      }>(
+        `SELECT id, total, quote_number FROM quotes
+          WHERE work_order_id = $1 AND tenant_id = $2 AND status = 'sent'
+          ORDER BY created_at DESC LIMIT 1`,
+        [workOrderId, tenantId],
+      );
+      if (!quoteRows[0]) {
+        throw createHttpError(422, "No hay presupuesto pendiente de aprobación.");
+      }
+      const quote = quoteRows[0];
+      const approvedAt = new Date().toISOString();
+
+      // Approve quote
+      await client.query(
+        `UPDATE quotes
+            SET status = 'approved', approved_by_client = true,
+                approved_at = $1, updated_at = NOW()
+          WHERE id = $2`,
+        [approvedAt, quote.id],
+      );
+
+      // Transition work order
+      await workOrderRepository.updateStatus(client, workOrderId, tenantId, "in_progress", {});
+
+      // Immutable legal record (IP + UA + human-readable fingerprint)
+      await historyLogRepository.create(client, {
+        tenant_id:     tenantId,
+        entity_type:   "work_order",
+        entity_id:     workOrderId,
+        action:        "quote_approved_by_client",
+        old_values:    { status: "awaiting_approval", quote_status: "sent" },
+        new_values:    { status: "in_progress", quote_status: "approved" },
+        changed_fields: ["status", "quote_status"],
+        performed_by:  null as unknown as string, // client action — no internal user
+        ip_address:    meta.ip,
+        user_agent:    meta.userAgent,
+        metadata: {
+          quote_id:     quote.id,
+          quote_number: quote.quote_number,
+          quote_total:  quote.total,
+          legal_summary: `Cliente aprobó presupuesto ${quote.quote_number} por $${quote.total} el ${new Date(approvedAt).toLocaleString("es-CL")} desde IP ${meta.ip ?? "desconocida"}`,
+        },
+      });
+
+      // Status-change log (shows in timeline)
+      await historyLogRepository.logStatusChange(client, {
+        tenant_id:     tenantId,
+        work_order_id: workOrderId,
+        from_status:   "awaiting_approval",
+        to_status:     "in_progress",
+        performed_by:  null as unknown as string,
+        ip_address:    meta.ip,
+        user_agent:    meta.userAgent,
+      });
+
+      return workOrderRepository.findById(client, workOrderId, tenantId);
+    });
+
+    // Fire-and-forget WhatsApp for 'in_progress'
+    this._notifyClient(tenantId, updated, "in_progress").catch((err) =>
+      console.error("[WorkOrderService] WhatsApp approve notification failed:", err)
+    );
+  },
+
+  // -------------------------------------------------------------------------
+  // Client rejects the quote → cancelled + WhatsApp + immutable audit log
+  // -------------------------------------------------------------------------
+  async rejectByClient(
+    tenantId: string,
+    workOrderId: string,
+    meta: { ip?: string; userAgent?: string },
+  ): Promise<void> {
+    const updated = await withTenantTransaction(tenantId, async (client) => {
+      const workOrder = await workOrderRepository.findById(client, workOrderId, tenantId);
+
+      if (workOrder.status !== "awaiting_approval") {
+        throw createHttpError(
+          409,
+          "Esta orden no está esperando aprobación del cliente."
+        );
+      }
+
+      const { rows: quoteRows } = await client.query<{
+        id: string; total: number; quote_number: string;
+      }>(
+        `SELECT id, total, quote_number FROM quotes
+          WHERE work_order_id = $1 AND tenant_id = $2 AND status = 'sent'
+          ORDER BY created_at DESC LIMIT 1`,
+        [workOrderId, tenantId],
+      );
+      if (!quoteRows[0]) {
+        throw createHttpError(422, "No hay presupuesto activo para rechazar.");
+      }
+      const quote = quoteRows[0];
+      const rejectedAt = new Date().toISOString();
+
+      // Reject quote
+      await client.query(
+        `UPDATE quotes
+            SET status = 'rejected', approved_by_client = false,
+                approved_at = $1, updated_at = NOW()
+          WHERE id = $2`,
+        [rejectedAt, quote.id],
+      );
+
+      // Transition work order to cancelled
+      await workOrderRepository.updateStatus(client, workOrderId, tenantId, "cancelled", {});
+
+      // Immutable legal record
+      await historyLogRepository.create(client, {
+        tenant_id:     tenantId,
+        entity_type:   "work_order",
+        entity_id:     workOrderId,
+        action:        "quote_rejected_by_client",
+        old_values:    { status: "awaiting_approval", quote_status: "sent" },
+        new_values:    { status: "cancelled", quote_status: "rejected" },
+        changed_fields: ["status", "quote_status"],
+        performed_by:  null as unknown as string,
+        ip_address:    meta.ip,
+        user_agent:    meta.userAgent,
+        metadata: {
+          quote_id:     quote.id,
+          quote_number: quote.quote_number,
+          quote_total:  quote.total,
+          legal_summary: `Cliente rechazó presupuesto ${quote.quote_number} por $${quote.total} el ${new Date(rejectedAt).toLocaleString("es-CL")} desde IP ${meta.ip ?? "desconocida"}`,
+        },
+      });
+
+      await historyLogRepository.logStatusChange(client, {
+        tenant_id:     tenantId,
+        work_order_id: workOrderId,
+        from_status:   "awaiting_approval",
+        to_status:     "cancelled",
+        performed_by:  null as unknown as string,
+        ip_address:    meta.ip,
+        user_agent:    meta.userAgent,
+      });
+
+      return workOrderRepository.findById(client, workOrderId, tenantId);
+    });
+
+    // Fire-and-forget WhatsApp for 'cancelled'
+    this._notifyClient(tenantId, updated, "cancelled").catch((err) =>
+      console.error("[WorkOrderService] WhatsApp reject notification failed:", err)
+    );
   },
 
   // -------------------------------------------------------------------------
@@ -314,5 +553,55 @@ export const workOrderService = {
     }
 
     console.log(`[WA] Delivered — order ${workOrder.order_number}, status ${newStatus}`);
+  },
+
+  // -------------------------------------------------------------------------
+  // Internal: send WhatsApp with presupuesto + approve/reject links
+  // Called fire-and-forget after createQuote auto-transitions to awaiting_approval
+  // -------------------------------------------------------------------------
+  async _notifyClientQuoteSent(
+    tenantId: string,
+    workOrder: WorkOrderDetail,
+    resumenCliente?: string,
+  ): Promise<void> {
+    if (!workOrder.client_phone) {
+      console.log(`[WA] Skipped quote notification — order ${workOrder.order_number} has no client phone.`);
+      return;
+    }
+
+    const phone = normalizeArgentinePhone(workOrder.client_phone);
+    const { slug: tenantSlug, name: workshopName } = await getTenantInfo(tenantId);
+
+    const baseUrl    = env.TRACKING_BASE_URL;
+    const orderEnc   = encodeURIComponent(workOrder.order_number);
+    const approveUrl = `${baseUrl}/api/orders/${tenantSlug}/${orderEnc}/approve`;
+    const rejectUrl  = `${baseUrl}/api/orders/${tenantSlug}/${orderEnc}/reject`;
+    const trackingUrl = `${baseUrl}/track/${tenantSlug}/${orderEnc}`;
+
+    const message = buildMessage("awaiting_approval", phone, {
+      clientName:    workOrder.client_name,
+      orderNumber:   workOrder.order_number,
+      vehiclePlate:  workOrder.vehicle_plate,
+      vehicleBrand:  workOrder.vehicle_brand,
+      vehicleModel:  workOrder.vehicle_model,
+      trackingUrl,
+      workshopName,
+      resumenCliente,
+      approveUrl,
+      rejectUrl,
+    });
+
+    if (!message) return;
+
+    const useBaileys = sessionManager.isConnected(tenantId);
+    console.log(`[WA] Sending quote notification to ${phone} via ${useBaileys ? "Baileys" : "provider:" + env.WHATSAPP_PROVIDER}`);
+
+    if (useBaileys) {
+      await sessionManager.sendMessage(tenantId, phone, message.body);
+    } else {
+      await whatsappService.sendMessage(message);
+    }
+
+    console.log(`[WA] Quote notification delivered — order ${workOrder.order_number}`);
   },
 };

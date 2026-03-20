@@ -5,6 +5,7 @@
 export const WORK_ORDER_STATUSES = [
   "received",
   "diagnosing",
+  "awaiting_approval",   // ← client must approve quote before repair starts
   "awaiting_parts",
   "in_progress",
   "quality_control",
@@ -16,14 +17,15 @@ export const WORK_ORDER_STATUSES = [
 export type WorkOrderStatus = (typeof WORK_ORDER_STATUSES)[number];
 
 export const STATUS_LABELS: Record<WorkOrderStatus, string> = {
-  received:        "Recibido",
-  diagnosing:      "En diagnóstico",
-  awaiting_parts:  "Esperando repuestos",
-  in_progress:     "En reparación",
-  quality_control: "Control de calidad",
-  ready:           "Listo para retirar",
-  delivered:       "Entregado",
-  cancelled:       "Cancelado",
+  received:          "Recibido",
+  diagnosing:        "En diagnóstico",
+  awaiting_approval: "Esperando aprobación del cliente",
+  awaiting_parts:    "Esperando repuestos",
+  in_progress:       "En reparación",
+  quality_control:   "Control de calidad",
+  ready:             "Listo para retirar",
+  delivered:         "Entregado",
+  cancelled:         "Cancelado",
 };
 
 export interface WorkOrder {
@@ -135,6 +137,8 @@ export interface CreateQuoteItemDTO {
 export interface CreateQuoteDTO {
   items: CreateQuoteItemDTO[];
   notes?: string;
+  /** AI-generated client summary (from voice diagnosis). Included in the WhatsApp approval message. */
+  resumen_cliente?: string;
 }
 
 export interface QuoteItem {

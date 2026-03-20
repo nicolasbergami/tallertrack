@@ -7,7 +7,7 @@ interface Props {
 
 // The canonical forward flow (excluding cancelled, which is a side-exit)
 const FLOW: WorkOrderStatus[] = [
-  "received", "diagnosing", "awaiting_parts", "in_progress", "quality_control", "ready", "delivered",
+  "received", "diagnosing", "awaiting_approval", "awaiting_parts", "in_progress", "quality_control", "ready", "delivered",
 ];
 
 export function StatusTimeline({ currentStatus }: Props) {
