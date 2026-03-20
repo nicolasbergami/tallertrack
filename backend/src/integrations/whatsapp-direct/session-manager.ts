@@ -115,6 +115,13 @@ export const sessionManager = {
 
   // ── Internal: create and wire a WASocket ──────────────────────────────────
   async _connect(tenantId: string, qrEmitter: EventEmitter): Promise<void> {
+    // Prevent unhandled 'error' event crash when nobody is listening (e.g. during restore)
+    if (qrEmitter.listenerCount("error") === 0) {
+      qrEmitter.on("error", (err: Error) =>
+        console.warn(`[WhatsApp] Connection error for tenant ${tenantId}:`, err.message)
+      );
+    }
+
     console.log(`[WhatsApp] [1/4] Loading Baileys for tenant ${tenantId}`);
     const { default: makeWASocket, DisconnectReason, fetchLatestBaileysVersion } = await loadBaileys();
     console.log(`[WhatsApp] [2/4] Baileys loaded for tenant ${tenantId}`);

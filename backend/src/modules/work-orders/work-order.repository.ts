@@ -219,23 +219,23 @@ export const workOrderRepository = {
     workOrderId: string,
     dto: CreateQuoteDTO,
   ): Promise<QuoteWithItems> {
-    const TAX_RATE = 0.19; // IVA Chile
-
-    // Subtotal before tax
+    // subtotal only — tax_amount and total are GENERATED columns in the DB
     const subtotal = dto.items.reduce(
       (sum, i) => sum + i.unit_price * i.quantity,
       0,
     );
-    const tax   = Math.round(subtotal * TAX_RATE);
-    const total = subtotal + tax;
 
-    // Insert quote
+    // quote_number is NOT NULL — generate it as P-0001, P-0002, etc. per tenant
     const { rows: quoteRows } = await client.query(
       `INSERT INTO quotes
-         (tenant_id, work_order_id, status, subtotal, tax, total, notes)
-       VALUES ($1, $2, 'draft', $3, $4, $5, $6)
-       RETURNING *`,
-      [tenantId, workOrderId, subtotal, tax, total, dto.notes ?? null],
+         (tenant_id, work_order_id, quote_number, status, subtotal, notes)
+       VALUES (
+         $1, $2,
+         'P-' || LPAD(((SELECT COUNT(*) FROM quotes WHERE tenant_id = $1) + 1)::text, 4, '0'),
+         'draft', $3, $4
+       )
+       RETURNING *, tax_amount AS tax`,
+      [tenantId, workOrderId, subtotal, dto.notes ?? null],
     );
     const quote = quoteRows[0];
 
@@ -243,21 +243,21 @@ export const workOrderRepository = {
       return { ...quote, items: [] };
     }
 
-    // Bulk-insert items
+    // Bulk-insert items — column is item_type (not type), and tenant_id is required
     const itemParams: unknown[] = [];
     dto.items.forEach((i) => {
-      itemParams.push(quote.id, i.type, i.description, i.quantity, i.unit_price);
+      itemParams.push(quote.id, tenantId, i.type, i.description, i.quantity, i.unit_price);
     });
 
     const valuesClause = dto.items
       .map((_, idx) => {
-        const base = idx * 5;
-        return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5})`;
+        const base = idx * 6;
+        return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6})`;
       })
       .join(", ");
 
     const { rows: itemRows } = await client.query(
-      `INSERT INTO quote_items (quote_id, type, description, quantity, unit_price)
+      `INSERT INTO quote_items (quote_id, tenant_id, item_type, description, quantity, unit_price)
        VALUES ${valuesClause}
        RETURNING *`,
       itemParams,
