@@ -31,6 +31,13 @@ function QRModal({ onClose, onConnected }: { onClose: () => void; onConnected: (
     const ctrl = new AbortController();
     abortRef.current = ctrl;
 
+    // Client-side safety timeout: if the backend never sends an event within
+    // 50 seconds (e.g. proxy buffers everything or backend hangs), show error.
+    const safetyTimer = setTimeout(() => {
+      ctrl.abort();
+      setError("El servidor no respondió. Verificá que el servicio esté activo y reintentá.");
+    }, 50_000);
+
     (async () => {
       try {
         const res = await fetch("/api/v1/whatsapp/connect", {
@@ -39,12 +46,14 @@ function QRModal({ onClose, onConnected }: { onClose: () => void; onConnected: (
         });
 
         if (res.status === 401) {
+          clearTimeout(safetyTimer);
           useAuthStore.getState().logout();
           window.location.replace("/login");
           return;
         }
 
         if (!res.ok || !res.body) {
+          clearTimeout(safetyTimer);
           setError("No se pudo iniciar la conexión.");
           return;
         }
@@ -75,21 +84,28 @@ function QRModal({ onClose, onConnected }: { onClose: () => void; onConnected: (
               };
 
               if (payload.type === "qr" && payload.qr) {
+                clearTimeout(safetyTimer);
                 setQrImage(payload.qr);
               } else if (payload.type === "connected") {
+                clearTimeout(safetyTimer);
                 onConnected(payload.phone ?? "");
               } else if (payload.type === "timeout") {
+                clearTimeout(safetyTimer);
                 setTimedOut(true);
               } else if (payload.type === "disconnected" || payload.type === "error") {
+                clearTimeout(safetyTimer);
                 setError(payload.reason ?? payload.message ?? "Desconectado");
               }
             } catch { /* ignore malformed SSE line */ }
           }
         }
       } catch (err: unknown) {
+        clearTimeout(safetyTimer);
         if ((err as Error).name !== "AbortError") {
           setError("Error de conexión.");
         }
+      } finally {
+        clearTimeout(safetyTimer);
       }
     })();
   }, [token, onConnected]);
