@@ -31,6 +31,11 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     return undefined as T;
   }
 
+  if (response.status === 402) {
+    window.location.replace("/billing");
+    return undefined as T;
+  }
+
   if (!response.ok) {
     const body = await response.json().catch(() => null);
     throw new ApiError(
