@@ -5,6 +5,7 @@ import {
   CreateWorkOrderDTO,
   TransitionDTO,
   PaymentMethod,
+  OrderSummary,
 } from "../types/work-order";
 
 export interface RecordPaymentDTO {
@@ -61,4 +62,7 @@ export const workOrdersApi = {
 
   downloadRemito: (id: string) =>
     api.getBlob(`/work-orders/${id}/remito`),
+
+  getSummary: (id: string) =>
+    api.get<OrderSummary>(`/work-orders/${id}/summary`),
 };

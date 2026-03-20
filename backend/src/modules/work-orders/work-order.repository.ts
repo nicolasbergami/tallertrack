@@ -19,6 +19,21 @@ async function generateOrderNumber(client: PoolClient, tenantId: string): Promis
 }
 
 // ---------------------------------------------------------------------------
+// Utility: generate a padded quote number like "PR-2024-00007"
+// ---------------------------------------------------------------------------
+async function generateQuoteNumber(client: PoolClient, tenantId: string): Promise<string> {
+  const year = new Date().getFullYear();
+  const { rows } = await client.query<{ count: string }>(
+    `SELECT COUNT(*) FROM quotes
+      WHERE tenant_id = $1
+        AND EXTRACT(YEAR FROM created_at) = $2`,
+    [tenantId, year]
+  );
+  const seq = parseInt(rows[0].count, 10) + 1;
+  return `PR-${year}-${String(seq).padStart(5, "0")}`;
+}
+
+// ---------------------------------------------------------------------------
 // Repository
 // ---------------------------------------------------------------------------
 export const workOrderRepository = {
@@ -225,17 +240,14 @@ export const workOrderRepository = {
       0,
     );
 
-    // quote_number is NOT NULL — generate it as P-0001, P-0002, etc. per tenant
+    // Insert quote — quote_number generated via helper, tax_amount aliased as tax
+    const quoteNumber = await generateQuoteNumber(client, tenantId);
     const { rows: quoteRows } = await client.query(
       `INSERT INTO quotes
          (tenant_id, work_order_id, quote_number, status, subtotal, notes)
-       VALUES (
-         $1, $2,
-         'P-' || LPAD(((SELECT COUNT(*) FROM quotes WHERE tenant_id = $1) + 1)::text, 4, '0'),
-         'draft', $3, $4
-       )
+       VALUES ($1, $2, $3, 'draft', $4, $5)
        RETURNING *, tax_amount AS tax`,
-      [tenantId, workOrderId, subtotal, dto.notes ?? null],
+      [tenantId, workOrderId, quoteNumber, subtotal, dto.notes ?? null],
     );
     const quote = quoteRows[0];
 

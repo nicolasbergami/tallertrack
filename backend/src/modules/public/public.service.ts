@@ -2,6 +2,7 @@ import { pool, withTenantContext, withTenantTransaction } from "../../config/dat
 import { createHttpError } from "../../middleware/error.middleware";
 import { historyLogRepository } from "../../shared/history-log.repository";
 import { workOrderService } from "../work-orders/work-order.service";
+import { workOrderRepository } from "../work-orders/work-order.repository";
 import {
   PublicOrderData, PublicQuote, PublicQuoteItem,
   PublicHistoryEntry, QuoteResponseDTO,
@@ -188,7 +189,14 @@ export const publicService = {
         [newStatus, dto.action === "approve", approvedAt, quoteId]
       );
 
-      // 4. Write IMMUTABLE legal log — this is the evidence record
+      // 4. Transition work order status
+      if (dto.action === "approve") {
+        await workOrderRepository.updateStatus(client, workOrderId, tenant.id, "in_progress", {});
+      } else {
+        await workOrderRepository.updateStatus(client, workOrderId, tenant.id, "cancelled", {});
+      }
+
+      // 5. Write IMMUTABLE legal log — this is the evidence record
       await historyLogRepository.create(client, {
         tenant_id:    tenant.id,
         entity_type:  "quote",
@@ -218,7 +226,7 @@ export const publicService = {
         },
       });
 
-      // 5. Also log the event against the work order for the timeline
+      // 6. Also log the event against the work order for the timeline
       await historyLogRepository.create(client, {
         tenant_id:    tenant.id,
         entity_type:  "work_order",

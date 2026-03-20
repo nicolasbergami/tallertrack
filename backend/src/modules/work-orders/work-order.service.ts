@@ -154,15 +154,26 @@ export const workOrderService = {
       const current = await workOrderRepository.findById(client, workOrderId, tenantId);
 
       // 2a. Guard: transitions OUT of awaiting_approval to in_progress or awaiting_parts
-      //     are reserved for the client via the public /approve and /reject endpoints.
+      //     are normally reserved for the client via the public /approve and /reject endpoints.
+      //     Exception: if the quote was already approved by the client (e.g. bugged state),
+      //     allow the internal user to advance manually.
       if (
         current.status === "awaiting_approval" &&
         (dto.status === "in_progress" || dto.status === "awaiting_parts")
       ) {
-        throw createHttpError(
-          403,
-          "La orden espera aprobación del cliente. La reparación comenzará automáticamente cuando el cliente apruebe el presupuesto."
+        const { rows: approvedQuotes } = await client.query<{ id: string }>(
+          `SELECT id FROM quotes
+            WHERE work_order_id = $1 AND tenant_id = $2
+              AND approved_by_client = true
+            LIMIT 1`,
+          [workOrderId, tenantId],
         );
+        if (!approvedQuotes[0]) {
+          throw createHttpError(
+            403,
+            "La orden espera aprobación del cliente. La reparación comenzará automáticamente cuando el cliente apruebe el presupuesto."
+          );
+        }
       }
 
       // 2b. Validate transition — throws TransitionError if invalid
@@ -603,5 +614,19 @@ export const workOrderService = {
     }
 
     console.log(`[WA] Quote notification delivered — order ${workOrder.order_number}`);
+  },
+
+  // -------------------------------------------------------------------------
+  // Summary: order detail + latest quote with items (for delivered/cancelled view)
+  // -------------------------------------------------------------------------
+  async getSummary(
+    tenantId: string,
+    workOrderId: string,
+  ): Promise<WorkOrderDetail & { quote: QuoteWithItems | null }> {
+    return withTenantContext(tenantId, async (client) => {
+      const order = await workOrderRepository.findById(client, workOrderId, tenantId);
+      const quote = await workOrderRepository.getLatestQuote(client, workOrderId, tenantId);
+      return { ...order, quote };
+    });
   },
 };

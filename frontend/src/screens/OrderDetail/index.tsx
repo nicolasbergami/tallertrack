@@ -5,6 +5,7 @@ import { AppShell } from "../../components/layout/AppShell";
 import { ActionBar } from "./ActionBar";
 import { AiQuoteModal } from "./AiQuoteModal";
 import { DiagnosisPanel } from "./DiagnosisPanel";
+import { OrderSummaryCard } from "./OrderSummaryCard";
 import { PaymentModal } from "./PaymentModal";
 import { workOrdersApi } from "../../api/work-orders.api";
 import { getStatusConfig, formatElapsed } from "../../config/status.config";
@@ -246,6 +247,11 @@ export function OrderDetail() {
             </h3>
             <p className="text-amber-100/80 text-sm leading-relaxed">{order.internal_notes}</p>
           </section>
+        )}
+
+        {/* ── Order summary (delivered / cancelled only) ───────────────────── */}
+        {(order.status === "delivered" || order.status === "cancelled") && (
+          <OrderSummaryCard workOrderId={order.id} />
         )}
 
         {/* ── Payment ──────────────────────────────────────────────────────── */}

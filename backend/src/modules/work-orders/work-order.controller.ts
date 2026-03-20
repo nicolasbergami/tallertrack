@@ -231,4 +231,13 @@ export const workOrderController = {
       next(err);
     }
   },
+
+  async getSummary(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const summary = await workOrderService.getSummary(req.user.tenant_id, req.params.id);
+      res.json(summary);
+    } catch (err) {
+      next(err);
+    }
+  },
 };

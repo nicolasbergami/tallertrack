@@ -59,6 +59,44 @@ export interface WorkOrderDetail {
   vehicle_model: string;
 }
 
+// ---------------------------------------------------------------------------
+// Quote summary (returned by GET /work-orders/:id/summary)
+// ---------------------------------------------------------------------------
+export type QuoteItemType = "labor" | "part" | "consumable" | "external_service";
+
+export const QUOTE_ITEM_TYPE_LABELS: Record<QuoteItemType, string> = {
+  labor:            "Mano de obra",
+  part:             "Repuesto",
+  consumable:       "Consumible",
+  external_service: "Servicio externo",
+};
+
+export interface QuoteItem {
+  id:          string;
+  quote_id:    string;
+  item_type:   QuoteItemType;
+  description: string;
+  quantity:    number;
+  unit_price:  number;
+  line_total:  number;
+}
+
+export interface QuoteSummary {
+  id:           string;
+  quote_number: string;
+  status:       "draft" | "sent" | "approved" | "rejected" | "expired";
+  subtotal:     number;
+  tax_amount:   number;
+  total:        number;
+  notes:        string | null;
+  approved_at:  string | null;
+  items:        QuoteItem[];
+}
+
+export interface OrderSummary extends WorkOrderDetail {
+  quote: QuoteSummary | null;
+}
+
 export interface CreateWorkOrderDTO {
   vehicle_id?: string;
   vehicle_data?: { license_plate: string; brand: string; model: string; year?: number; color?: string };
