@@ -137,6 +137,15 @@ export function ActionBar({ order }: Props) {
           </div>
           <span className="ml-auto w-2 h-2 rounded-full bg-violet-400 animate-pulse flex-shrink-0" />
         </div>
+        <button
+          disabled={transitionMutation.isPending}
+          onClick={() => transitionMutation.mutate("in_progress")}
+          className="w-full h-10 rounded-xl bg-surface-raised border border-surface-border
+                     text-slate-400 text-sm font-semibold hover:text-orange-300 hover:border-orange-500/40
+                     transition-colors disabled:opacity-50"
+        >
+          {transitionMutation.isPending ? "…" : "Cliente ya aprobó — Iniciar reparación"}
+        </button>
       </div>
     );
   }
