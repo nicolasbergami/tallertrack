@@ -9,9 +9,10 @@ interface Props {
   title?: string;
   backTo?: string;
   action?: ReactNode;
+  footer?: ReactNode;
 }
 
-export function AppShell({ children, title, backTo, action }: Props) {
+export function AppShell({ children, title, backTo, action, footer }: Props) {
   const navigate = useNavigate();
 
   return (
@@ -50,6 +51,9 @@ export function AppShell({ children, title, backTo, action }: Props) {
       <main className="flex-1 overflow-y-auto">
         {children}
       </main>
+
+      {/* ── Footer slot (e.g. sticky FAB above nav) ── */}
+      {footer && <div className="flex-shrink-0">{footer}</div>}
 
       {/* ── Bottom Nav ── */}
       <nav className="sticky bottom-0 border-t border-surface-border bg-surface/95 backdrop-blur

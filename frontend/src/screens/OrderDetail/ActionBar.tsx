@@ -1,39 +1,54 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { WorkOrderDetail, WorkOrderStatus } from "../../types/work-order";
-import { BigButton } from "../../components/ui/BigButton";
-import { TextareaField } from "../../components/ui/Field";
 import { STATUS_CONFIG, NEXT_STATES, CANCELLABLE } from "../../config/status.config";
 import { workOrdersApi } from "../../api/work-orders.api";
+import { IconWhatsapp } from "../../components/ui/Icons";
 
 interface Props {
   order: WorkOrderDetail;
 }
 
+function IconForward({ className = "w-6 h-6" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M13 5l7 7-7 7M6 5l7 7-7 7" />
+    </svg>
+  );
+}
+
 export function ActionBar({ order }: Props) {
   const queryClient = useQueryClient();
-  const [showCancel, setShowCancel] = useState(false);
-  const [diagnosis,  setDiagnosis]  = useState(order.diagnosis ?? "");
-  const [notes,      setNotes]      = useState("");
-  const [mileageOut, setMileageOut] = useState("");
-  const [showDiagnosisInput, setShowDiagnosisInput] = useState(false);
 
-  const nextStates  = NEXT_STATES[order.status] ?? [];
-  const canCancel   = CANCELLABLE.includes(order.status);
-  const isTerminal  = nextStates.length === 0 && !canCancel;
+  const [sheetOpen,         setSheetOpen]         = useState(false);
+  const [selectedNext,      setSelectedNext]      = useState<WorkOrderStatus | null>(null);
+  const [diagnosis,         setDiagnosis]         = useState(order.diagnosis ?? "");
+  const [notes,             setNotes]             = useState("");
+  const [mileageOut,        setMileageOut]        = useState("");
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+
+  const nextStates = NEXT_STATES[order.status] ?? [];
+  const canCancel  = CANCELLABLE.includes(order.status);
+  const isTerminal = nextStates.length === 0 && !canCancel;
+
+  const primaryNext = nextStates[0] ?? null;
+  const primaryCfg  = primaryNext ? STATUS_CONFIG[primaryNext] : null;
+  const activeNext  = selectedNext ?? primaryNext;
+  const activeCfg   = activeNext   ? STATUS_CONFIG[activeNext] : null;
 
   const transitionMutation = useMutation({
     mutationFn: (newStatus: WorkOrderStatus) =>
       workOrdersApi.transition(order.id, {
         status:         newStatus,
-        diagnosis:      diagnosis || undefined,
-        internal_notes: notes     || undefined,
+        diagnosis:      diagnosis  || undefined,
+        internal_notes: notes      || undefined,
         mileage_out:    mileageOut ? parseInt(mileageOut, 10) : undefined,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["work-order", order.id] });
       queryClient.invalidateQueries({ queryKey: ["work-orders"] });
-      setShowDiagnosisInput(false);
+      setSheetOpen(false);
       setNotes("");
     },
   });
@@ -44,121 +59,53 @@ export function ActionBar({ order }: Props) {
       )}`
     : null;
 
+  function openSheet() {
+    setSelectedNext(primaryNext);
+    setSheetOpen(true);
+  }
+
+  const needsDiagnosis = order.status === "diagnosing";
+  const needsMileage   = order.status === "quality_control" && activeNext === "ready";
+
+  // ── Terminal state ────────────────────────────────────────────────────────
   if (isTerminal) {
     return (
-      <div className="px-4 py-4 border-t border-surface-border">
-        <div className="bg-surface-raised rounded-2xl p-4 text-center">
+      <div className="bg-surface border-t border-surface-border px-4 py-3">
+        <div className="bg-surface-card border border-surface-border rounded-2xl p-4 text-center">
           <p className="text-slate-400 text-sm">
-            {order.status === "delivered" ? "✅ Orden finalizada y entregada" : "Orden en estado terminal"}
+            {order.status === "delivered" ? "✅ Orden finalizada y entregada" : "Orden cancelada"}
           </p>
         </div>
       </div>
     );
   }
 
+  // ── Active state ──────────────────────────────────────────────────────────
   return (
-    <div className="border-t border-surface-border bg-surface-card">
+    <>
+      <div className="bg-surface border-t border-surface-border px-4 pt-3 pb-4 flex flex-col gap-3">
 
-      {/* Optional diagnosis/notes input panel */}
-      {showDiagnosisInput && (
-        <div className="p-4 border-b border-surface-border bg-surface flex flex-col gap-3 animate-slide-up">
-          {(order.status === "diagnosing" || !order.diagnosis) && (
-            <TextareaField
-              label="Diagnóstico"
-              value={diagnosis}
-              onChange={(e) => setDiagnosis(e.target.value)}
-              placeholder="Ej: Pastillas de freno desgastadas al 100%…"
-              rows={2}
-            />
-          )}
-          <TextareaField
-            label="Nota interna (opcional)"
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder="Observaciones para el equipo…"
-            rows={2}
-          />
-          {order.status === "quality_control" && (
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-semibold text-slate-400 uppercase tracking-wide">
-                Odómetro de salida (km)
-              </label>
-              <input
-                type="number"
-                value={mileageOut}
-                onChange={(e) => setMileageOut(e.target.value)}
-                placeholder={String(order.mileage_in ?? "")}
-                inputMode="numeric"
-                className="w-full h-touch bg-surface-card border border-surface-border rounded-xl
-                           px-4 text-lg text-slate-100 placeholder-slate-500
-                           focus:outline-none focus:ring-2 focus:ring-brand"
-              />
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Error */}
-      {transitionMutation.error && (
-        <div className="mx-4 mt-3 bg-red-950/60 border border-red-800 rounded-xl p-3">
-          <p className="text-red-300 text-sm font-semibold">
-            ⚠️ {(transitionMutation.error as Error).message}
-          </p>
-        </div>
-      )}
-
-      <div className="p-4 flex flex-col gap-3">
-
-        {/* Primary next-state buttons — one per valid next state */}
-        {nextStates.map((nextStatus) => {
-          const cfg = STATUS_CONFIG[nextStatus];
-          const isForward = nextStatus !== "in_progress"; // QC → in_progress is backwards
-
-          return (
-            <BigButton
-              key={nextStatus}
-              variant="primary"
-              size="xl"
-              fullWidth
-              loading={transitionMutation.isPending && !transitionMutation.isError}
-              onClick={() => {
-                if (!showDiagnosisInput && (order.status === "diagnosing" || order.status === "quality_control")) {
-                  setShowDiagnosisInput(true);
-                } else {
-                  transitionMutation.mutate(nextStatus);
-                }
-              }}
-              icon={<span>{isForward ? cfg.emoji : "↩️"}</span>}
-            >
-              {isForward
-                ? `Pasar a: ${cfg.label}`
-                : `Volver a reparación`}
-            </BigButton>
-          );
-        })}
-
-        {/* WhatsApp + Cancel row */}
-        <div className="flex gap-3">
-          {whatsappUrl && (
+        {/* Secondary row: WhatsApp + Cancel */}
+        <div className="flex items-center justify-between">
+          {whatsappUrl ? (
             <a
               href={whatsappUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className={`
-                flex-1 h-touch flex items-center justify-center gap-2 rounded-xl
-                bg-green-800 hover:bg-green-700 text-white font-bold text-base
-                transition-all touch-feedback
-              `}
+              className="flex items-center gap-2 h-9 px-3 rounded-xl
+                         bg-green-950/50 border border-green-800/60
+                         text-green-400 text-sm font-semibold hover:bg-green-950 transition-colors"
             >
-              <span className="text-xl">💬</span> WhatsApp
+              <IconWhatsapp className="w-4 h-4" />
+              WhatsApp
             </a>
-          )}
+          ) : <div />}
 
-          {canCancel && !showCancel && (
+          {canCancel && !showCancelConfirm && (
             <button
-              onClick={() => setShowCancel(true)}
-              className="h-touch px-4 rounded-xl bg-surface-raised text-red-400 text-sm font-semibold
-                         hover:bg-red-950/60 transition-all touch-feedback flex-shrink-0"
+              onClick={() => setShowCancelConfirm(true)}
+              className="h-9 px-3 rounded-xl text-red-400/60 text-sm font-semibold
+                         hover:text-red-400 hover:bg-red-950/30 transition-colors"
             >
               Cancelar OT
             </button>
@@ -166,31 +113,201 @@ export function ActionBar({ order }: Props) {
         </div>
 
         {/* Cancel confirmation */}
-        {showCancel && (
-          <div className="bg-red-950/60 border border-red-800 rounded-2xl p-4 flex flex-col gap-3 animate-slide-up">
-            <p className="text-red-300 font-semibold">
-              ¿Confirmar cancelación de la orden?
-            </p>
-            <p className="text-red-400/70 text-sm">
-              Esta acción quedará registrada en el historial.
-            </p>
-            <div className="flex gap-3">
-              <BigButton
-                variant="danger"
-                size="md"
-                fullWidth
-                loading={transitionMutation.isPending}
+        {showCancelConfirm && (
+          <div className="bg-red-950/60 border border-red-800 rounded-2xl p-4 flex flex-col gap-3">
+            <p className="text-red-300 font-semibold text-sm">¿Confirmar cancelación de la orden?</p>
+            <div className="flex gap-2">
+              <button
+                disabled={transitionMutation.isPending}
                 onClick={() => transitionMutation.mutate("cancelled")}
+                className="flex-1 h-10 rounded-xl bg-red-700 hover:bg-red-600 text-white
+                           text-sm font-bold transition-colors disabled:opacity-50"
               >
-                Sí, cancelar
-              </BigButton>
-              <BigButton variant="ghost" size="md" onClick={() => setShowCancel(false)}>
+                {transitionMutation.isPending ? "…" : "Sí, cancelar"}
+              </button>
+              <button
+                onClick={() => setShowCancelConfirm(false)}
+                className="h-10 px-4 rounded-xl bg-surface-raised text-slate-300 text-sm font-semibold"
+              >
                 No
-              </BigButton>
+              </button>
             </div>
           </div>
         )}
+
+        {/* Transition error */}
+        {transitionMutation.error && (
+          <div className="bg-red-950/60 border border-red-800 rounded-xl p-3">
+            <p className="text-red-300 text-sm font-semibold">
+              ⚠️ {(transitionMutation.error as Error).message}
+            </p>
+          </div>
+        )}
+
+        {/* ── Main FAB ── */}
+        {primaryNext && primaryCfg && (
+          <button
+            onClick={openSheet}
+            className="w-full h-16 rounded-2xl flex items-center justify-center gap-3
+                       font-bold text-white active:scale-[0.98] transition-transform"
+            style={{
+              background: "linear-gradient(135deg, #EA580C 0%, #F97316 50%, #C2410C 100%)",
+              boxShadow:  "0 4px 24px rgba(249,115,22,0.4), inset 0 1px 0 rgba(255,255,255,0.12), inset 0 -1px 0 rgba(0,0,0,0.2)",
+            }}
+          >
+            <IconForward className="w-6 h-6 flex-shrink-0 opacity-90" />
+            <div className="flex flex-col items-start leading-tight">
+              <span className="text-orange-200/70 text-[10px] font-semibold uppercase tracking-widest">
+                Avanzar a
+              </span>
+              <span className="text-white font-black text-[17px] leading-tight">
+                {primaryCfg.label}
+              </span>
+            </div>
+          </button>
+        )}
       </div>
-    </div>
+
+      {/* ── Advance Confirmation Bottom Sheet ──────────────────────────────── */}
+      {sheetOpen && (
+        <div className="fixed inset-0 z-50 flex items-end">
+          <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => setSheetOpen(false)}
+          />
+          <div
+            className="relative w-full max-w-2xl mx-auto bg-surface-card rounded-t-[2rem]
+                        border-t border-x border-surface-border flex flex-col animate-slide-up"
+          >
+            {/* Drag handle */}
+            <div className="flex justify-center pt-3 pb-1">
+              <div className="w-10 h-1 bg-slate-600 rounded-full" />
+            </div>
+
+            <div className="px-6 pb-8 flex flex-col gap-4">
+              {/* Header */}
+              <div>
+                <p className="text-[10px] text-slate-500 uppercase tracking-widest font-semibold">
+                  Confirmar avance
+                </p>
+                <p className="text-xl font-black text-white mt-0.5">
+                  {activeCfg?.emoji} {activeCfg?.label}
+                </p>
+              </div>
+
+              {/* State picker (only when 2+ next states) */}
+              {nextStates.length > 1 && (
+                <div className="flex gap-2">
+                  {nextStates.map((ns) => {
+                    const c = STATUS_CONFIG[ns];
+                    const sel = (selectedNext ?? primaryNext) === ns;
+                    const isBackward = ns === "in_progress" && order.status === "quality_control";
+                    return (
+                      <button
+                        key={ns}
+                        onClick={() => setSelectedNext(ns)}
+                        className={`flex-1 h-12 rounded-xl border text-sm font-bold transition-all ${
+                          sel
+                            ? `${c.bgColor} ${c.textColor} ${c.borderColor}`
+                            : "bg-surface border-surface-border text-slate-500 hover:text-slate-300"
+                        }`}
+                      >
+                        {isBackward ? "↩" : c.emoji}{" "}
+                        {isBackward ? "Volver a reparar" : c.shortLabel}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Diagnosis field */}
+              {needsDiagnosis && (
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">
+                    Diagnóstico (recomendado)
+                  </label>
+                  <textarea
+                    value={diagnosis}
+                    onChange={(e) => setDiagnosis(e.target.value)}
+                    placeholder="Ej: Pastillas de freno desgastadas al 100%…"
+                    rows={2}
+                    className="w-full bg-surface border border-surface-border rounded-xl px-4 py-3
+                               text-slate-100 placeholder-slate-500 text-sm resize-none
+                               focus:outline-none focus:ring-2 focus:ring-brand"
+                  />
+                </div>
+              )}
+
+              {/* Note field */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">
+                  Nota interna (opcional)
+                </label>
+                <textarea
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Observaciones para el equipo…"
+                  rows={2}
+                  className="w-full bg-surface border border-surface-border rounded-xl px-4 py-3
+                             text-slate-100 placeholder-slate-500 text-sm resize-none
+                             focus:outline-none focus:ring-2 focus:ring-brand"
+                />
+              </div>
+
+              {/* Mileage out */}
+              {needsMileage && (
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">
+                    Odómetro de salida (km)
+                  </label>
+                  <input
+                    type="number"
+                    value={mileageOut}
+                    onChange={(e) => setMileageOut(e.target.value)}
+                    placeholder={String(order.mileage_in ?? "")}
+                    inputMode="numeric"
+                    className="w-full h-12 bg-surface border border-surface-border rounded-xl
+                               px-4 text-slate-100 placeholder-slate-500 text-base
+                               focus:outline-none focus:ring-2 focus:ring-brand"
+                  />
+                </div>
+              )}
+
+              {/* Confirm button */}
+              <button
+                onClick={() => { if (activeNext) transitionMutation.mutate(activeNext); }}
+                disabled={transitionMutation.isPending || !activeNext}
+                className="w-full h-14 rounded-2xl flex items-center justify-center gap-2
+                           font-bold text-white text-base disabled:opacity-60
+                           active:scale-[0.99] transition-transform"
+                style={{
+                  background: "linear-gradient(135deg, #EA580C 0%, #F97316 50%, #C2410C 100%)",
+                  boxShadow:  "0 4px 16px rgba(249,115,22,0.35)",
+                }}
+              >
+                {transitionMutation.isPending ? (
+                  <>
+                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Aplicando…
+                  </>
+                ) : (
+                  <>
+                    <IconForward className="w-5 h-5" />
+                    Confirmar avance
+                  </>
+                )}
+              </button>
+
+              <button
+                onClick={() => setSheetOpen(false)}
+                className="text-slate-500 text-sm text-center hover:text-slate-300 transition-colors"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

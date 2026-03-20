@@ -2,9 +2,6 @@ import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppShell } from "../../components/layout/AppShell";
-import { StatusBadge } from "../../components/ui/StatusBadge";
-import { BigButton } from "../../components/ui/BigButton";
-import { StatusTimeline } from "./StatusTimeline";
 import { ActionBar } from "./ActionBar";
 import { AiQuoteModal } from "./AiQuoteModal";
 import { PaymentModal } from "./PaymentModal";
@@ -16,25 +13,46 @@ import { PAYMENT_METHOD_LABELS } from "../../types/work-order";
 // Statuses where a mechanic can dictate a quote
 const AI_QUOTE_STATUSES = ["diagnosing", "awaiting_parts", "in_progress"] as const;
 
+// Inline icon — calendar (not in central library)
+function IconCalendar({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+      <path strokeLinecap="round" strokeLinejoin="round"
+        d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+    </svg>
+  );
+}
+
+// Inline icon — person circle
+function IconPersonCircle({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+      <path strokeLinecap="round" strokeLinejoin="round"
+        d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+  );
+}
+
 export function OrderDetail() {
-  const { id }      = useParams<{ id: string }>();
-  const qc          = useQueryClient();
-  const [qrModal,      setQrModal]      = useState(false);
-  const [aiModal,      setAiModal]      = useState(false);
-  const [payModal,     setPayModal]     = useState(false);
+  const { id } = useParams<{ id: string }>();
+  const qc     = useQueryClient();
+
+  const [qrModal,       setQrModal]       = useState(false);
+  const [aiModal,       setAiModal]       = useState(false);
+  const [payModal,      setPayModal]      = useState(false);
   const [remitoLoading, setRemitoLoading] = useState(false);
 
   const { data: order, isLoading, error } = useQuery({
-    queryKey:    ["work-order", id],
-    queryFn:     () => workOrdersApi.getById(id!),
-    enabled:     !!id,
+    queryKey:        ["work-order", id],
+    queryFn:         () => workOrdersApi.getById(id!),
+    enabled:         !!id,
     refetchInterval: 20_000,
   });
 
   const { data: qrData } = useQuery({
-    queryKey: ["work-order-qr", id],
-    queryFn:  () => workOrdersApi.getQrJson(id!),
-    enabled:  !!id && qrModal,
+    queryKey:  ["work-order-qr", id],
+    queryFn:   () => workOrdersApi.getQrJson(id!),
+    enabled:   !!id && qrModal,
     staleTime: Infinity,
   });
 
@@ -61,11 +79,11 @@ export function OrderDetail() {
     );
   }
 
-  const cfg = getStatusConfig(order.status);
+  const cfg     = getStatusConfig(order.status);
   const elapsed = formatElapsed(order.received_at);
 
-  const canDictateQuote  = (AI_QUOTE_STATUSES as readonly string[]).includes(order.status);
-  const isPaid           = order.payment_status === "paid";
+  const canDictateQuote = (AI_QUOTE_STATUSES as readonly string[]).includes(order.status);
+  const isPaid          = order.payment_status === "paid";
 
   async function handleDownloadRemito() {
     if (!order) return;
@@ -87,64 +105,112 @@ export function OrderDetail() {
     <AppShell
       title={order.order_number}
       backTo="/dashboard"
+      footer={<ActionBar order={order} />}
       action={
-        <div className="flex items-center gap-2">
-          {canDictateQuote && (
-            <button
-              onClick={() => setAiModal(true)}
-              className="h-9 px-3 rounded-xl bg-brand/15 hover:bg-brand/25 border border-brand/30
-                         text-brand font-semibold text-xs flex items-center gap-1.5 transition-colors"
-            >
-              <IconWrench className="w-3.5 h-3.5" />
-              Presupuesto IA
-            </button>
-          )}
-          <BigButton size="md" variant="secondary" onClick={() => setQrModal(true)} icon={<IconQr className="w-4 h-4" />}>
-            QR
-          </BigButton>
-        </div>
+        canDictateQuote ? (
+          <button
+            onClick={() => setAiModal(true)}
+            className="h-9 px-3 rounded-xl bg-brand/15 hover:bg-brand/25 border border-brand/30
+                       text-brand font-semibold text-xs flex items-center gap-1.5 transition-colors"
+          >
+            <IconWrench className="w-3.5 h-3.5" />
+            Presupuesto IA
+          </button>
+        ) : undefined
       }
     >
       <div className="flex flex-col pb-4">
 
-        {/* ── Status Banner ── */}
-        <div className={`${cfg.bgColor} border-b ${cfg.borderColor} px-4 py-4`}>
-          <div className="flex items-center justify-between gap-3">
-            <StatusBadge status={order.status} size="lg" />
-            <span className="text-slate-400 text-sm">{elapsed} en taller</span>
-          </div>
-        </div>
-
-        {/* ── Vehicle Card ── */}
-        <section className="mx-4 mt-4 bg-surface-card rounded-2xl overflow-hidden border border-surface-border">
-          <div className="bg-surface-raised px-4 py-3 flex items-center gap-3">
-            <span className="font-plate text-slate-50 text-3xl tracking-widest">
+        {/* ── Hero: plate + status badge + client ──────────────────────────── */}
+        <section className={`${cfg.bgColor} border-b ${cfg.borderColor} px-4 pt-5 pb-4`}>
+          {/* Plate + mileage */}
+          <div className="flex items-start justify-between gap-3">
+            <span className="font-plate text-slate-50 text-4xl tracking-widest leading-none">
               {order.vehicle_plate}
             </span>
             {order.mileage_in && (
-              <span className="text-slate-500 text-sm ml-auto">{order.mileage_in.toLocaleString()} km</span>
+              <span className="text-slate-500 text-xs font-mono mt-1.5 flex-shrink-0">
+                {order.mileage_in.toLocaleString()} km
+              </span>
             )}
           </div>
-          <div className="px-4 py-3 flex flex-col gap-1">
-            <p className="text-lg font-bold text-slate-200">
-              {order.vehicle_brand} {order.vehicle_model}
-            </p>
-            <div className="flex items-center gap-2 text-sm text-slate-400 flex-wrap">
-              <span>{order.client_name}</span>
-              {order.client_phone && (
-                <a
-                  href={`tel:${order.client_phone}`}
-                  className="flex items-center gap-1.5 text-brand hover:text-brand-hover font-medium"
-                >
-                  <IconPhone className="w-3.5 h-3.5" />
-                  {order.client_phone}
-                </a>
-              )}
-            </div>
+
+          {/* Vehicle */}
+          <p className="text-slate-300 font-semibold text-base mt-1.5">
+            {order.vehicle_brand} {order.vehicle_model}
+          </p>
+
+          {/* Status badge (glowing) + elapsed */}
+          <div className="flex items-center gap-3 mt-3">
+            <span
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full
+                          text-xs font-bold ${cfg.textColor} ${cfg.bgColor} border ${cfg.borderColor}`}
+            >
+              <span className={`w-2 h-2 rounded-full ${cfg.dotColor} animate-pulse`} />
+              {cfg.label}
+            </span>
+            <span className="text-slate-500 text-xs">{elapsed} en taller</span>
+          </div>
+
+          {/* Client */}
+          <div className="flex items-center gap-2 mt-3 flex-wrap">
+            <span className="text-slate-400 text-sm">{order.client_name}</span>
+            {order.client_phone && (
+              <a
+                href={`tel:${order.client_phone}`}
+                className="flex items-center gap-1 text-brand hover:text-brand-hover font-medium text-sm"
+              >
+                <IconPhone className="w-3.5 h-3.5" />
+                {order.client_phone}
+              </a>
+            )}
           </div>
         </section>
 
-        {/* ── Complaint ── */}
+        {/* ── Info pills: mechanic + delivery ──────────────────────────────── */}
+        <div className="flex gap-2 px-4 pt-3 flex-wrap">
+          <div className="flex items-center gap-1.5 bg-surface-card border border-surface-border
+                          rounded-full px-3 py-1.5 text-xs text-slate-300">
+            <IconPersonCircle className="w-3.5 h-3.5 text-slate-500 flex-shrink-0" />
+            <span className="max-w-[120px] truncate">
+              {order.assigned_user_name ?? "Sin asignar"}
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5 bg-surface-card border border-surface-border
+                          rounded-full px-3 py-1.5 text-xs text-slate-300">
+            <IconCalendar className="w-3.5 h-3.5 text-slate-500 flex-shrink-0" />
+            <span>
+              {order.estimated_delivery
+                ? new Date(order.estimated_delivery).toLocaleDateString("es-AR", {
+                    day: "2-digit", month: "short",
+                  })
+                : "Sin fecha estimada"}
+            </span>
+          </div>
+        </div>
+
+        {/* ── QR highlighted card ───────────────────────────────────────────── */}
+        <div className="px-4 pt-2">
+          <button
+            onClick={() => setQrModal(true)}
+            className="w-full flex items-center gap-3 bg-surface-card border border-surface-border
+                       rounded-2xl px-4 py-3 hover:bg-surface-raised active:scale-[0.99]
+                       transition-all group"
+          >
+            <div className="w-9 h-9 rounded-xl bg-slate-700/80 border border-slate-600/60
+                            flex items-center justify-center flex-shrink-0
+                            group-hover:border-brand/50 group-hover:bg-brand/10 transition-colors">
+              <IconQr className="w-5 h-5 text-slate-300 group-hover:text-brand transition-colors" />
+            </div>
+            <div className="flex-1 text-left">
+              <p className="text-sm font-semibold text-slate-200">QR de seguimiento</p>
+              <p className="text-[11px] text-slate-500">Mostrá al cliente para rastrear su vehículo</p>
+            </div>
+            <span className="text-slate-600 text-xl leading-none">›</span>
+          </button>
+        </div>
+
+        {/* ── Complaint ────────────────────────────────────────────────────── */}
         <section className="mx-4 mt-3 bg-surface-card rounded-2xl p-4 border border-surface-border">
           <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
             Falla reportada
@@ -152,7 +218,7 @@ export function OrderDetail() {
           <p className="text-slate-200 text-base leading-relaxed">{order.complaint}</p>
         </section>
 
-        {/* ── Diagnosis (shown if set) ── */}
+        {/* ── Diagnosis ────────────────────────────────────────────────────── */}
         {order.diagnosis && (
           <section className="mx-4 mt-3 bg-sky-950/40 rounded-2xl p-4 border border-sky-800/50">
             <h3 className="text-xs font-semibold text-sky-500 uppercase tracking-wide mb-2">
@@ -162,7 +228,7 @@ export function OrderDetail() {
           </section>
         )}
 
-        {/* ── Internal notes ── */}
+        {/* ── Internal notes ───────────────────────────────────────────────── */}
         {order.internal_notes && (
           <section className="mx-4 mt-3 bg-amber-950/30 rounded-2xl p-4 border border-amber-800/40">
             <h3 className="text-xs font-semibold text-amber-500 uppercase tracking-wide mb-2">
@@ -172,10 +238,9 @@ export function OrderDetail() {
           </section>
         )}
 
-        {/* ── Payment section ── */}
+        {/* ── Payment ──────────────────────────────────────────────────────── */}
         <section className="mx-4 mt-3">
           {isPaid ? (
-            /* Paid — green summary card */
             <div className="bg-emerald-950/40 rounded-2xl p-4 border border-emerald-800/50 flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-emerald-900/60 flex items-center justify-center flex-shrink-0">
                 <span className="text-lg">✓</span>
@@ -206,7 +271,6 @@ export function OrderDetail() {
               </button>
             </div>
           ) : (
-            /* Not paid — action row */
             <div className="bg-amber-950/30 rounded-2xl p-4 border border-amber-800/40 flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-amber-900/40 flex items-center justify-center flex-shrink-0">
                 <span className="text-lg">💰</span>
@@ -238,42 +302,13 @@ export function OrderDetail() {
           )}
         </section>
 
-        {/* ── Assigned mechanic + delivery ── */}
-        <section className="mx-4 mt-3 grid grid-cols-2 gap-3">
-          <div className="bg-surface-card rounded-2xl p-3 border border-surface-border">
-            <p className="text-xs text-slate-500 mb-1">Mecánico</p>
-            <p className="text-sm font-semibold text-slate-200">
-              {order.assigned_user_name ?? "—"}
-            </p>
-          </div>
-          <div className="bg-surface-card rounded-2xl p-3 border border-surface-border">
-            <p className="text-xs text-slate-500 mb-1">Entrega estimada</p>
-            <p className="text-sm font-semibold text-slate-200">
-              {order.estimated_delivery
-                ? new Date(order.estimated_delivery).toLocaleDateString("es-CL", { day: "2-digit", month: "short" })
-                : "—"}
-            </p>
-          </div>
-        </section>
-
-        {/* ── Timeline ── */}
-        <div className="mt-4 bg-surface-card border-t border-b border-surface-border py-4">
-          <StatusTimeline currentStatus={order.status} />
-        </div>
-
-        {/* ── Action bar ── */}
-        <ActionBar order={order} />
       </div>
 
-      {/* ── Payment Modal ── */}
+      {/* ── Modals ───────────────────────────────────────────────────────────── */}
       {payModal && (
-        <PaymentModal
-          order={order}
-          onClose={() => setPayModal(false)}
-        />
+        <PaymentModal order={order} onClose={() => setPayModal(false)} />
       )}
 
-      {/* ── AI Quote Modal ── */}
       {aiModal && (
         <AiQuoteModal
           workOrderId={order.id}
@@ -286,7 +321,7 @@ export function OrderDetail() {
         />
       )}
 
-      {/* ── QR Modal ── */}
+      {/* ── QR Modal ─────────────────────────────────────────────────────────── */}
       {qrModal && (
         <div
           className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-6"
@@ -298,7 +333,7 @@ export function OrderDetail() {
           >
             <h2 className="text-lg font-bold text-slate-100">Código QR</h2>
             <p className="text-sm text-slate-400 text-center">
-              El cliente puede escanear este código para rastrear su vehículo
+              El cliente escanea este código para rastrear su vehículo
             </p>
 
             {qrData ? (
@@ -308,7 +343,8 @@ export function OrderDetail() {
                 className="w-64 h-64 rounded-2xl"
               />
             ) : (
-              <div className="w-64 h-64 bg-surface-raised rounded-2xl animate-pulse flex items-center justify-center">
+              <div className="w-64 h-64 bg-surface-raised rounded-2xl animate-pulse
+                              flex items-center justify-center">
                 <span className="text-slate-500 text-4xl">⬜</span>
               </div>
             )}
@@ -329,9 +365,13 @@ export function OrderDetail() {
                   Descargar PNG
                 </a>
               )}
-              <BigButton variant="ghost" size="md" fullWidth onClick={() => setQrModal(false)}>
+              <button
+                onClick={() => setQrModal(false)}
+                className="w-full h-11 rounded-xl border border-surface-border text-slate-400
+                           hover:text-slate-200 text-sm font-semibold transition-colors"
+              >
                 Cerrar
-              </BigButton>
+              </button>
             </div>
           </div>
         </div>
