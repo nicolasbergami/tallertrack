@@ -11,7 +11,7 @@ const envSchema = z.object({
   JWT_SECRET: z.string().min(32, "JWT_SECRET must be at least 32 characters"),
   JWT_EXPIRES_IN: z.string().default("8h"),
 
-  TRACKING_BASE_URL: z.string().url().default("https://track.tallertrack.com"),
+  TRACKING_BASE_URL: z.string().url().default("https://tallertrack-production.up.railway.app"),
 
   WHATSAPP_PROVIDER: z.enum(["mock", "meta", "twilio"]).default("mock"),
   WHATSAPP_API_URL: z.string().optional(),

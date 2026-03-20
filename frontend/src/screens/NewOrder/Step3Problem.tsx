@@ -1,7 +1,23 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "../../api/client";
 import { NewOrderFormState } from "../../types/work-order";
-import { TextareaField, InputField } from "../../components/ui/Field";
+import { TextareaField } from "../../components/ui/Field";
 import { BigButton } from "../../components/ui/BigButton";
+
+interface TeamMember {
+  id:        string;
+  full_name: string;
+  role:      string;
+  status:    string;
+}
+
+const ROLE_LABEL: Record<string, string> = {
+  mechanic:     "Mecánico",
+  admin:        "Admin",
+  receptionist: "Recepcionista",
+  owner:        "Propietario",
+};
 
 interface Props {
   form: NewOrderFormState;
@@ -30,6 +46,14 @@ const QUICK_COMPLAINTS = [
 
 export function Step3Problem({ form, onChange, onSubmit, onBack, loading }: Props) {
   const [errors, setErrors] = useState<Partial<Record<string, string>>>({});
+
+  const { data: teamData, isLoading: teamLoading } = useQuery<{ members: TeamMember[] }>({
+    queryKey: ["team"],
+    queryFn:  () => api.get("/team"),
+    staleTime: 5 * 60_000,
+  });
+
+  const mechanics = (teamData?.members ?? []).filter((m) => m.status === "active");
 
   const validate = () => {
     const e: typeof errors = {};
@@ -116,13 +140,45 @@ export function Step3Problem({ form, onChange, onSubmit, onBack, loading }: Prop
       />
 
       {/* Assigned mechanic */}
-      <InputField
-        label="Mecánico asignado (opcional)"
-        value={form.assigned_to}
-        onChange={(e) => onChange({ assigned_to: e.target.value })}
-        placeholder="Nombre del mecánico"
-        icon="🔧"
-      />
+      <div className="flex flex-col gap-2">
+        <label className="text-sm font-semibold text-slate-400 uppercase tracking-wide">
+          Mecánico asignado (opcional)
+        </label>
+
+        {teamLoading ? (
+          <div className="flex flex-col gap-2">
+            {[1, 2].map((i) => (
+              <div key={i} className="h-12 bg-surface-card rounded-xl animate-pulse border border-surface-border" />
+            ))}
+          </div>
+        ) : mechanics.length === 0 ? (
+          <p className="text-slate-500 text-sm px-1">
+            No hay miembros activos en el equipo.{" "}
+            <span className="text-slate-600">Podés asignar desde el detalle de la orden.</span>
+          </p>
+        ) : (
+          <div className="flex flex-col gap-1.5">
+            {/* Unassigned option */}
+            <MechanicOption
+              id=""
+              name="Sin asignar"
+              role=""
+              selected={form.assigned_to === ""}
+              onSelect={() => onChange({ assigned_to: "" })}
+            />
+            {mechanics.map((m) => (
+              <MechanicOption
+                key={m.id}
+                id={m.id}
+                name={m.full_name}
+                role={ROLE_LABEL[m.role] ?? m.role}
+                selected={form.assigned_to === m.id}
+                onSelect={() => onChange({ assigned_to: m.id })}
+              />
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Internal notes */}
       <TextareaField
@@ -150,5 +206,58 @@ export function Step3Problem({ form, onChange, onSubmit, onBack, loading }: Prop
         </BigButton>
       </div>
     </div>
+  );
+}
+
+// ── Mechanic selector row ──────────────────────────────────────────────────
+function MechanicOption({
+  id, name, role, selected, onSelect,
+}: {
+  id: string; name: string; role: string;
+  selected: boolean; onSelect: () => void;
+}) {
+  const initials = id === ""
+    ? "–"
+    : name.split(" ").slice(0, 2).map((n) => n[0]).join("").toUpperCase();
+
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className={`flex items-center gap-3 w-full px-3 py-2.5 rounded-xl border-2 text-left
+                  transition-all active:scale-[0.99] touch-feedback
+                  ${selected
+                    ? "border-brand bg-brand/10"
+                    : "border-surface-border bg-surface-card hover:border-slate-600"
+                  }`}
+    >
+      {/* Avatar */}
+      <div
+        className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 text-xs font-black
+                    ${selected
+                      ? "bg-brand/20 text-brand"
+                      : "bg-surface-raised text-slate-400"
+                    }`}
+      >
+        {initials}
+      </div>
+
+      {/* Name + role */}
+      <div className="flex-1 min-w-0">
+        <p className={`text-sm font-semibold truncate ${selected ? "text-slate-100" : "text-slate-300"}`}>
+          {name}
+        </p>
+        {role && (
+          <p className="text-[11px] text-slate-500">{role}</p>
+        )}
+      </div>
+
+      {/* Check */}
+      {selected && (
+        <svg className="w-4 h-4 text-brand flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+        </svg>
+      )}
+    </button>
   );
 }

@@ -3,6 +3,7 @@ import { NavLink, useNavigate } from "react-router-dom";
 import {
   IconOrders, IconPlus, IconHistory, IconUser, IconBack,
 } from "../ui/Icons";
+import { GlobalAlertBanner } from "../alerts/GlobalAlertBanner";
 
 interface Props {
   children: ReactNode;
@@ -46,6 +47,9 @@ export function AppShell({ children, title, backTo, action, footer }: Props) {
 
         {action && <div className="flex-shrink-0">{action}</div>}
       </header>
+
+      {/* ── Global alert banners ── */}
+      <GlobalAlertBanner />
 
       {/* ── Content ── */}
       <main className="flex-1 overflow-y-auto">

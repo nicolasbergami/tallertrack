@@ -46,6 +46,7 @@ export function NewOrder() {
         },
         complaint:      form.complaint,
         mileage_in:     form.mileage_in ? parseInt(form.mileage_in, 10) : undefined,
+        assigned_to:    form.assigned_to  || undefined,
         internal_notes: form.internal_notes || undefined,
       }),
     onSuccess: async (newOrder) => {

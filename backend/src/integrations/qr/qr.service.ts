@@ -11,7 +11,7 @@ export interface QRCodeResult {
  * Generates a QR code that points to the public tracking URL for a work order.
  *
  * Tracking URL format:
- *   https://track.tallertrack.com/{tenantSlug}/{orderNumber}
+ *   https://tallertrack-production.up.railway.app/{tenantSlug}/{orderNumber}
  *
  * The public page does NOT require authentication — clients can scan it to
  * see real-time status updates without logging in.

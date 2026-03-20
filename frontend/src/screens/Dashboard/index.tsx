@@ -4,9 +4,10 @@ import { useQuery } from "@tanstack/react-query";
 import { AppShell } from "../../components/layout/AppShell";
 import { WorkOrderCard } from "./WorkOrderCard";
 import { workOrdersApi } from "../../api/work-orders.api";
+import { api } from "../../api/client";
 import { WorkOrderStatus, WorkOrderDetail } from "../../types/work-order";
 import { ACTIVE_STATUSES, STATUS_CONFIG } from "../../config/status.config";
-import { IconSearch, IconX, IconPlus, IconList, IconGrid, IconWrench } from "../../components/ui/Icons";
+import { IconSearch, IconX, IconPlus, IconList, IconGrid } from "../../components/ui/Icons";
 import { useAuthStore } from "../../store/auth.store";
 
 const KANBAN_COLUMNS: WorkOrderStatus[] = ACTIVE_STATUSES;
@@ -409,26 +410,237 @@ function KanbanView({
 }
 
 function EmptyState() {
+  const { data: waStatus } = useQuery<{ status: string }>({
+    queryKey:    ["whatsapp-status"],
+    queryFn:     () => api.get("/whatsapp/status"),
+    staleTime:   60_000,
+  });
+
+  const waConnected = waStatus?.status === "connected";
+  return waConnected ? <EmptyStateReady /> : <EmptyStateOnboarding />;
+}
+
+// ── Onboarding: WhatsApp not yet connected ─────────────────────────────────
+function EmptyStateOnboarding() {
   const navigate = useNavigate();
+
   return (
-    <div className="flex flex-col items-center justify-center py-20 px-8 gap-5 text-center">
-      <div className="w-16 h-16 rounded-2xl bg-surface-card border border-surface-border
-                      flex items-center justify-center">
-        <IconWrench className="w-7 h-7 text-slate-600" />
+    <div className="flex flex-col items-center justify-center py-12 px-8 gap-6 text-center animate-slide-up">
+
+      {/* WhatsApp icon with glow */}
+      <div className="relative">
+        <div className="absolute inset-0 rounded-full bg-green-500/10 animate-pulse scale-[1.5]" />
+        <div
+          className="relative w-20 h-20 rounded-3xl bg-green-950/60 border border-green-800/50
+                     flex items-center justify-center"
+          style={{ boxShadow: "0 0 32px rgba(74,222,128,0.2), 0 0 8px rgba(74,222,128,0.1)" }}
+        >
+          {/* WhatsApp inline SVG */}
+          <svg className="w-10 h-10 text-green-400" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+          </svg>
+        </div>
       </div>
-      <div>
-        <p className="text-slate-300 font-semibold text-base">Sin órdenes activas</p>
-        <p className="text-slate-500 text-sm mt-1">Todo al día por ahora</p>
+
+      {/* Headline */}
+      <div className="space-y-2">
+        <p className="text-slate-100 font-bold text-xl leading-snug">
+          ¡Bienvenido a TallerTrack!
+        </p>
+        <p className="text-slate-400 text-sm leading-relaxed max-w-[280px]">
+          Antes de recibir tu primer auto, conectemos tu WhatsApp para automatizar los avisos a tus clientes.
+        </p>
       </div>
+
+      {/* Progress steps */}
+      <div className="w-full max-w-xs flex flex-col gap-2">
+        <StepRow done label="Cuenta creada" />
+        <StepRow active label="Conectar WhatsApp" />
+        <StepRow label="Crear primera orden" />
+      </div>
+
+      {/* CTA */}
+      <div className="flex flex-col gap-3 w-full max-w-xs">
+        <button
+          onClick={() => navigate("/profile")}
+          className="w-full h-12 rounded-xl font-bold text-sm text-white
+                     flex items-center justify-center gap-2 transition-colors"
+          style={{
+            background:  "linear-gradient(135deg, #15803D 0%, #16A34A 60%, #15803D 100%)",
+            boxShadow:   "0 2px 16px rgba(22,163,74,0.35)",
+          }}
+        >
+          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+          </svg>
+          Conectar WhatsApp
+        </button>
+        <button
+          onClick={() => navigate("/new")}
+          className="text-slate-600 text-xs hover:text-slate-400 transition-colors py-1"
+        >
+          Saltar por ahora →
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Ready: WhatsApp connected, no orders yet ───────────────────────────────
+function EmptyStateReady() {
+  const navigate = useNavigate();
+
+  return (
+    <div className="flex flex-col items-center justify-center py-12 px-8 gap-6 text-center animate-slide-up">
+
+      {/* Illustration: car on lift */}
+      <CarOnLiftSVG />
+
+      {/* Text */}
+      <div className="space-y-1.5">
+        <p className="text-slate-100 font-bold text-xl">Todo listo.</p>
+        <p className="text-brand font-semibold text-sm">Tu taller está automatizado.</p>
+        <p className="text-slate-500 text-sm mt-2 leading-relaxed">
+          Cuando llegue tu primer auto, creá la orden de trabajo acá.
+        </p>
+      </div>
+
+      {/* CTA */}
       <button
         onClick={() => navigate("/new")}
-        className="flex items-center gap-2 px-5 h-10 rounded-xl bg-brand
-                   text-white font-semibold text-sm transition-colors hover:bg-brand-hover"
+        className="flex items-center gap-2 px-6 h-12 rounded-xl bg-brand
+                   hover:bg-brand-hover text-white font-bold text-sm
+                   transition-colors active:scale-95"
+        style={{ boxShadow: "0 2px 16px rgba(249,115,22,0.3)" }}
       >
         <IconPlus className="w-4 h-4" />
         Crear primera orden
       </button>
     </div>
+  );
+}
+
+// ── Step row for onboarding progress ──────────────────────────────────────
+function StepRow({ label, done, active }: { label: string; done?: boolean; active?: boolean }) {
+  return (
+    <div className={`flex items-center gap-3 px-4 py-3 rounded-xl border
+                     ${done   ? "bg-green-950/30 border-green-800/40"
+                     : active ? "bg-brand/10 border-brand/30"
+                     :          "bg-surface-card border-surface-border opacity-50"}`}>
+      {/* Icon */}
+      <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0
+                       ${done   ? "bg-green-700/60"
+                       : active ? "bg-brand/20 border border-brand/40"
+                       :          "bg-surface-raised border border-surface-border"}`}>
+        {done ? (
+          <svg className="w-3.5 h-3.5 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+          </svg>
+        ) : active ? (
+          <span className="w-2 h-2 rounded-full bg-brand animate-pulse" />
+        ) : (
+          <span className="w-2 h-2 rounded-full bg-slate-600" />
+        )}
+      </div>
+      <span className={`text-sm font-semibold
+                        ${done ? "text-green-400" : active ? "text-slate-200" : "text-slate-600"}`}>
+        {label}
+      </span>
+    </div>
+  );
+}
+
+// ── Car on lift SVG illustration ───────────────────────────────────────────
+function CarOnLiftSVG() {
+  return (
+    <svg viewBox="0 0 200 150" className="w-52 h-40" fill="none" xmlns="http://www.w3.org/2000/svg">
+      {/* Ground glow */}
+      <ellipse cx="100" cy="142" rx="72" ry="7" fill="#EA580C" opacity="0.12" />
+
+      {/* Lift columns */}
+      <rect x="20" y="88" width="8" height="52" rx="4" fill="#374151" />
+      <rect x="172" y="88" width="8" height="52" rx="4" fill="#374151" />
+
+      {/* Base feet */}
+      <rect x="12" y="136" width="24" height="6" rx="3" fill="#4B5563" />
+      <rect x="164" y="136" width="24" height="6" rx="3" fill="#4B5563" />
+
+      {/* Lift arms (orange) */}
+      <line x1="28" y1="102" x2="62" y2="88" stroke="#EA580C" strokeWidth="4" strokeLinecap="round" />
+      <line x1="172" y1="102" x2="138" y2="88" stroke="#EA580C" strokeWidth="4" strokeLinecap="round" />
+
+      {/* Lift platform */}
+      <rect x="58" y="84" width="84" height="7" rx="3.5" fill="#C2410C" />
+      <rect x="60" y="84" width="80" height="4" rx="2"
+            fill="url(#liftGrad)" opacity="0.9" />
+
+      {/* Car body */}
+      <rect x="42" y="50" width="116" height="38" rx="9" fill="#1E2536" stroke="#4B5563" strokeWidth="1.5" />
+
+      {/* Cabin roof */}
+      <path d="M74 50 C76 28 124 28 126 50" fill="#131720" stroke="#4B5563" strokeWidth="1.5" strokeLinejoin="round" />
+
+      {/* Windshield */}
+      <path d="M80 50 C82 36 100 33 100 50Z" fill="#1D4ED8" opacity="0.35" />
+      {/* Rear window */}
+      <path d="M100 50 C100 33 118 36 120 50Z" fill="#1D4ED8" opacity="0.35" />
+
+      {/* Headlight */}
+      <rect x="153" y="61" width="9" height="5" rx="2.5" fill="#FCD34D" opacity="0.8" />
+      <rect x="153" y="61" width="9" height="5" rx="2.5" fill="url(#headlightGlow)" opacity="0.5" />
+
+      {/* Tail light */}
+      <rect x="38" y="61" width="7" height="5" rx="2.5" fill="#EF4444" opacity="0.7" />
+
+      {/* Door line */}
+      <line x1="100" y1="52" x2="100" y2="86" stroke="#374151" strokeWidth="1" />
+
+      {/* Wheels */}
+      <circle cx="72" cy="88" r="13" fill="#111827" stroke="#4B5563" strokeWidth="2" />
+      <circle cx="72" cy="88" r="6" fill="#1E2536" stroke="#374151" strokeWidth="1" />
+      <circle cx="128" cy="88" r="13" fill="#111827" stroke="#4B5563" strokeWidth="2" />
+      <circle cx="128" cy="88" r="6" fill="#1E2536" stroke="#374151" strokeWidth="1" />
+
+      {/* Wheel spokes */}
+      {[0, 60, 120, 180, 240, 300].map((deg) => (
+        <line
+          key={deg}
+          x1={72 + 3 * Math.cos((deg * Math.PI) / 180)}
+          y1={88 + 3 * Math.sin((deg * Math.PI) / 180)}
+          x2={72 + 5.5 * Math.cos((deg * Math.PI) / 180)}
+          y2={88 + 5.5 * Math.sin((deg * Math.PI) / 180)}
+          stroke="#4B5563" strokeWidth="1" strokeLinecap="round"
+        />
+      ))}
+      {[0, 60, 120, 180, 240, 300].map((deg) => (
+        <line
+          key={deg}
+          x1={128 + 3 * Math.cos((deg * Math.PI) / 180)}
+          y1={88 + 3 * Math.sin((deg * Math.PI) / 180)}
+          x2={128 + 5.5 * Math.cos((deg * Math.PI) / 180)}
+          y2={88 + 5.5 * Math.sin((deg * Math.PI) / 180)}
+          stroke="#4B5563" strokeWidth="1" strokeLinecap="round"
+        />
+      ))}
+
+      {/* Brand badge (green checkmark) */}
+      <circle cx="160" cy="36" r="14" fill="#14532D" stroke="#166534" strokeWidth="1.5" />
+      <circle cx="160" cy="36" r="14" fill="#15803D" opacity="0.6" />
+      <path d="M153 36 L158 41 L167 30"
+            stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+
+      {/* Gradient defs */}
+      <defs>
+        <linearGradient id="liftGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#F97316" stopOpacity="0.8" />
+          <stop offset="100%" stopColor="#EA580C" stopOpacity="0.2" />
+        </linearGradient>
+        <radialGradient id="headlightGlow" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor="#FCD34D" />
+          <stop offset="100%" stopColor="#FCD34D" stopOpacity="0" />
+        </radialGradient>
+      </defs>
+    </svg>
   );
 }
 
