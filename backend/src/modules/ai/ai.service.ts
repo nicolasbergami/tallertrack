@@ -275,7 +275,7 @@ Considera que el taller trabaja ~8 horas por día. Sé realista y conservador.`,
 
     // ── Step 2: Analyze with Claude Haiku ───────────────────────────────────
     const response = await anthropic.messages.create({
-      model:      "claude-3-5-haiku-20241022",
+      model:      "claude-haiku-4-5-20251001",
       max_tokens: 1024,
       system: `Eres un asistente de taller mecánico. Recibirás una transcripción cruda del mecánico.
 Debes usar la herramienta save_diagnosis para devolver un resultado estructurado con:
