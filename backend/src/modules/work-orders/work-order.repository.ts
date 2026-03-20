@@ -256,18 +256,18 @@ export const workOrderRepository = {
     // Bulk-insert items
     const itemParams: unknown[] = [];
     dto.items.forEach((i) => {
-      itemParams.push(quote.id, i.type, i.description, i.quantity, i.unit_price);
+      itemParams.push(quote.id, tenantId, i.type, i.description, i.quantity, i.unit_price);
     });
 
     const valuesClause = dto.items
       .map((_, idx) => {
-        const base = idx * 5;
-        return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5})`;
+        const base = idx * 6;
+        return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6})`;
       })
       .join(", ");
 
     const { rows: itemRows } = await client.query(
-      `INSERT INTO quote_items (quote_id, type, description, quantity, unit_price)
+      `INSERT INTO quote_items (quote_id, tenant_id, item_type, description, quantity, unit_price)
        VALUES ${valuesClause}
        RETURNING *`,
       itemParams,
