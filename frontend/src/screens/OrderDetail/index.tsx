@@ -40,7 +40,7 @@ export function OrderDetail() {
 
   if (isLoading) {
     return (
-      <AppShell title="Cargando…" backTo="/">
+      <AppShell title="Cargando…" backTo="/dashboard">
         <div className="flex flex-col gap-3 p-4">
           {[1, 2, 3].map((i) => (
             <div key={i} className="bg-surface-card rounded-2xl h-24 animate-pulse" />
@@ -52,7 +52,7 @@ export function OrderDetail() {
 
   if (error || !order) {
     return (
-      <AppShell title="Error" backTo="/">
+      <AppShell title="Error" backTo="/dashboard">
         <div className="flex flex-col items-center gap-4 p-8 text-center">
           <span className="text-6xl">⚠️</span>
           <p className="text-red-400 font-semibold">No se pudo cargar la orden</p>
@@ -86,7 +86,7 @@ export function OrderDetail() {
   return (
     <AppShell
       title={order.order_number}
-      backTo="/"
+      backTo="/dashboard"
       action={
         <div className="flex items-center gap-2">
           {canDictateQuote && (

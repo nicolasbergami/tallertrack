@@ -1,6 +1,7 @@
 // `import type` generates ZERO runtime code — safe in CJS modules
 import type { AuthenticationState } from "@whiskeysockets/baileys";
 import { pool } from "../../config/database";
+import { loadBaileys } from "./baileys-loader";
 
 // Minimal silent logger compatible with Baileys / pino interface
 const silentLogger = {
@@ -16,20 +17,16 @@ const silentLogger = {
 
 // ---------------------------------------------------------------------------
 // PostgreSQL-backed Baileys AuthenticationState
-// Uses dynamic import() at runtime to avoid ESM/CJS conflict with Baileys.
 // ---------------------------------------------------------------------------
 export async function usePostgresAuthState(tenantId: string): Promise<{
   state:     AuthenticationState;
   saveCreds: () => Promise<void>;
 }> {
-  // new Function() prevents TypeScript from compiling import() → require()
-  // when module target is CommonJS.
   const {
     initAuthCreds,
     BufferJSON,
     makeCacheableSignalKeyStore,
-  // eslint-disable-next-line @typescript-eslint/no-implied-eval
-  } = await (new Function('return import("@whiskeysockets/baileys")')() as Promise<typeof import("@whiskeysockets/baileys")>);
+  } = await loadBaileys();
 
   // ── Load existing credentials ──────────────────────────────────────────────
   const { rows } = await pool.query<{ creds: unknown }>(

@@ -71,7 +71,7 @@ export function NewOrder() {
   });
 
   return (
-    <AppShell title="Nueva orden" backTo="/">
+    <AppShell title="Nueva orden" backTo="/dashboard">
 
       {/* Step indicator — sticky below header */}
       <div className="sticky top-[3.75rem] z-30 bg-surface/90 backdrop-blur

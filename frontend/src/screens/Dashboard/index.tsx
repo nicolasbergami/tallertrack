@@ -7,12 +7,14 @@ import { workOrdersApi } from "../../api/work-orders.api";
 import { WorkOrderStatus, WorkOrderDetail } from "../../types/work-order";
 import { ACTIVE_STATUSES, STATUS_CONFIG } from "../../config/status.config";
 import { IconSearch, IconX, IconPlus, IconList, IconGrid, IconWrench } from "../../components/ui/Icons";
+import { useAuthStore } from "../../store/auth.store";
 
 const KANBAN_COLUMNS: WorkOrderStatus[] = ACTIVE_STATUSES;
 const STALE_MS = 8 * 3600 * 1000; // 8 hours
 
 export function Dashboard() {
   const navigate  = useNavigate();
+  const tenantName = useAuthStore((s) => s.user?.tenantName ?? "");
   const [search,    setSearch]    = useState("");
   const [activeTab, setActiveTab] = useState<WorkOrderStatus | "all">("all");
   const [viewMode,  setViewMode]  = useState<"list" | "kanban">("list");
@@ -90,6 +92,7 @@ export function Dashboard() {
 
   return (
     <AppShell
+      title={tenantName}
       action={
         <div className="flex items-center gap-2">
           <button

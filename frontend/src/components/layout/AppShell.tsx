@@ -40,7 +40,7 @@ export function AppShell({ children, title, backTo, action }: Props) {
         )}
 
         <h1 className="flex-1 font-semibold text-sm text-slate-300 truncate">
-          {backTo ? (title ?? "") : ""}
+          {title ?? ""}
         </h1>
 
         {action && <div className="flex-shrink-0">{action}</div>}
@@ -55,7 +55,7 @@ export function AppShell({ children, title, backTo, action }: Props) {
       <nav className="sticky bottom-0 border-t border-surface-border bg-surface/95 backdrop-blur
                       grid grid-cols-4 pb-safe z-40">
         <NavItem to="/dashboard" Icon={IconOrders}  label="Órdenes"  />
-        <NavItem to="/new"       Icon={IconPlus}    label="Nueva OT" highlight />
+        <NavItem to="/new"       Icon={IconPlus}    label="Nueva"    highlight />
         <NavItem to="/history"   Icon={IconHistory} label="Historial" />
         <NavItem to="/profile"   Icon={IconUser}    label="Perfil"   />
       </nav>

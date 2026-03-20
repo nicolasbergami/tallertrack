@@ -2,6 +2,7 @@ import EventEmitter from "events";
 import { Boom } from "@hapi/boom";
 import { pool } from "../../config/database";
 import { usePostgresAuthState } from "./db-auth-state";
+import { loadBaileys, getBaileysVersion } from "./baileys-loader";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -10,22 +11,19 @@ export type SessionStatus = "connecting" | "qr" | "connected" | "disconnected";
 
 interface ManagedSession {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  socket:    any;          // WASocket — typed as any; loaded via dynamic import
+  socket:    any;
   qrEmitter: EventEmitter;
   status:    SessionStatus;
   phone?:    string;
 }
 
-// ---------------------------------------------------------------------------
-// In-memory session map  (tenantId → ManagedSession)
-// ---------------------------------------------------------------------------
 const sessions = new Map<string, ManagedSession>();
 
 // ---------------------------------------------------------------------------
 // Session Manager
 // ---------------------------------------------------------------------------
 export const sessionManager = {
-  // ── Status ────────────────────────────────────────────────────────────────
+
   getStatus(tenantId: string): { status: SessionStatus | "not_started"; phone: string | null } {
     const session = sessions.get(tenantId);
     if (!session) return { status: "not_started", phone: null };
@@ -36,7 +34,6 @@ export const sessionManager = {
     return sessions.get(tenantId)?.status === "connected";
   },
 
-  // ── Send a text message via the tenant's own WhatsApp number ──────────────
   async sendMessage(tenantId: string, phone: string, text: string): Promise<void> {
     const session = sessions.get(tenantId);
     if (!session || session.status !== "connected") {
@@ -46,7 +43,7 @@ export const sessionManager = {
     await session.socket.sendMessage(jid, { text });
   },
 
-  // ── Start (or return existing) session — returns EventEmitter for QR SSE ──
+  // ── Start (or return existing) session ────────────────────────────────────
   startSession(tenantId: string): EventEmitter {
     const existing = sessions.get(tenantId);
     if (existing && existing.status !== "disconnected") {
@@ -56,26 +53,26 @@ export const sessionManager = {
     const qrEmitter = new EventEmitter();
     let settled = false;
 
-    const settle = () => { settled = true; clearTimeout(masterTimeout); };
+    const settle = () => {
+      if (!settled) { settled = true; clearTimeout(masterTimeout); }
+    };
 
-    // Master timeout covers the pre-socket phase (Baileys ESM import, DB query,
-    // version fetch). If _connect hangs before creating the socket, the inner
-    // 30-second timeout never runs — this one catches that case.
+    // Master timeout: covers hangs in the pre-socket phase (loader, DB query).
+    // The inner 30-second timeout only starts after the socket is created.
     const masterTimeout = setTimeout(() => {
       if (!settled) {
-        console.error(`[WhatsApp] _connect master timeout for tenant ${tenantId} — hung before socket creation`);
+        console.error(`[WhatsApp] master timeout for tenant ${tenantId}`);
         sessions.delete(tenantId);
         qrEmitter.emit("error", new Error("La conexión tardó demasiado. Revisá los logs del servidor."));
       }
     }, 60_000);
 
-    // Wire up settle() to fire as soon as the emitter emits anything meaningful
-    qrEmitter.once("qr",          settle);
-    qrEmitter.once("connected",   settle);
+    qrEmitter.once("qr",           settle);
+    qrEmitter.once("connected",    settle);
     qrEmitter.once("disconnected", settle);
-    qrEmitter.once("error",       settle);
+    qrEmitter.once("error",        settle);
 
-    this._connect(tenantId, qrEmitter).catch((err) => {
+    this._connect(tenantId, qrEmitter).catch((err: Error) => {
       settle();
       console.error(`[WhatsApp] Session start error for tenant ${tenantId}:`, err);
       qrEmitter.emit("error", err);
@@ -84,7 +81,7 @@ export const sessionManager = {
     return qrEmitter;
   },
 
-  // ── Disconnect and clean up ───────────────────────────────────────────────
+  // ── Disconnect ─────────────────────────────────────────────────────────────
   async disconnectSession(tenantId: string): Promise<void> {
     const session = sessions.get(tenantId);
     if (session) {
@@ -95,13 +92,10 @@ export const sessionManager = {
       `UPDATE whatsapp_sessions SET status = 'disconnected', updated_at = NOW() WHERE tenant_id = $1`,
       [tenantId]
     );
-    await pool.query(
-      `DELETE FROM whatsapp_session_keys WHERE tenant_id = $1`,
-      [tenantId]
-    );
+    await pool.query(`DELETE FROM whatsapp_session_keys WHERE tenant_id = $1`, [tenantId]);
   },
 
-  // ── Restore previously-connected sessions on server startup ───────────────
+  // ── Restore sessions on startup ───────────────────────────────────────────
   async restoreAll(): Promise<void> {
     try {
       const { rows } = await pool.query<{ tenant_id: string }>(
@@ -115,29 +109,20 @@ export const sessionManager = {
         );
       }
     } catch (err) {
-      // Table might not exist yet (before first migration) — safe to ignore
       console.warn("[WhatsApp] restoreAll skipped:", (err as Error).message);
     }
   },
 
-  // ── Internal: create and wire a WASocket for a tenant ────────────────────
+  // ── Internal: create and wire a WASocket ──────────────────────────────────
   async _connect(tenantId: string, qrEmitter: EventEmitter): Promise<void> {
-    console.log(`[WhatsApp] [1/4] Starting connection for tenant ${tenantId}`);
-
-    // new Function() prevents TypeScript from compiling import() → require()
-    // when module target is CommonJS.  Node.js evaluates the native import()
-    // at runtime, which correctly handles ESM-only packages like Baileys.
-    // eslint-disable-next-line @typescript-eslint/no-implied-eval
-    const baileysModule = await (new Function('return import("@whiskeysockets/baileys")')() as Promise<typeof import("@whiskeysockets/baileys") & { Defaults?: { VERSION?: [number, number, number] } }>);
-    const { default: makeWASocket, DisconnectReason, fetchLatestBaileysVersion } = baileysModule;
-    console.log(`[WhatsApp] [2/4] Baileys imported for tenant ${tenantId}`);
+    console.log(`[WhatsApp] [1/4] Loading Baileys for tenant ${tenantId}`);
+    const { default: makeWASocket, DisconnectReason, fetchLatestBaileysVersion } = await loadBaileys();
+    console.log(`[WhatsApp] [2/4] Baileys loaded for tenant ${tenantId}`);
 
     const { state, saveCreds } = await usePostgresAuthState(tenantId);
     console.log(`[WhatsApp] [3/4] Auth state loaded for tenant ${tenantId}`);
 
-    // fetchLatestBaileysVersion makes an external HTTP request (GitHub/WA servers).
-    // In production it can hang indefinitely → apply a 10s timeout and fall back
-    // to the version bundled with the installed Baileys package.
+    // Fetch latest WA version with a 10s timeout; fall back to bundled version.
     let version: [number, number, number];
     try {
       const result = await Promise.race([
@@ -147,11 +132,11 @@ export const sessionManager = {
         ),
       ]);
       version = result.version;
-      console.log(`[WhatsApp] [4/4] WA version ${version} fetched for tenant ${tenantId}`);
     } catch (versionErr) {
-      version = baileysModule.Defaults?.VERSION ?? [2, 3000, 1015920];
-      console.warn(`[WhatsApp] [4/4] Version fetch failed (${(versionErr as Error).message}), using bundled ${version} for tenant ${tenantId}`);
+      version = await getBaileysVersion();
+      console.warn(`[WhatsApp] Version fetch failed (${(versionErr as Error).message}), using bundled ${version}`);
     }
+    console.log(`[WhatsApp] [4/4] Socket creating with version ${version} for tenant ${tenantId}`);
 
     const socket = makeWASocket({
       version,
@@ -161,27 +146,26 @@ export const sessionManager = {
       logger: {
         level:  "silent",
         child:  () => ({} as never),
-        trace:  () => {}, debug: () => {}, info: () => {},
+        trace:  () => {}, debug: () => {}, info:  () => {},
         warn:   () => {}, error: () => {}, fatal: () => {},
       } as never,
     });
 
-    console.log(`[WhatsApp] Socket created, waiting for QR/connection for tenant ${tenantId}`);
+    console.log(`[WhatsApp] Socket created, waiting for QR for tenant ${tenantId}`);
 
     const session: ManagedSession = { socket, qrEmitter, status: "connecting" };
     sessions.set(tenantId, session);
 
     let qrEverEmitted = false;
 
-    // Safety timeout: if WhatsApp never sends a QR or open/close event within
-    // 30 s, notify the frontend so the user can retry instead of waiting forever.
+    // Safety timeout: if WA server never responds within 30s after socket creation
     const noResponseTimeout = setTimeout(() => {
       if (!qrEverEmitted && session.status !== "connected") {
-        console.warn(`[WhatsApp] No response from WA server for tenant ${tenantId} after 30s — aborting`);
+        console.warn(`[WhatsApp] No response from WA server for tenant ${tenantId} after 30s`);
         session.status = "disconnected";
         sessions.delete(tenantId);
         try { socket.end(undefined); } catch { /* ignore */ }
-        qrEmitter.emit("error", new Error("WhatsApp no respondió en 30 segundos. El servidor puede no tener acceso a internet o la IP puede estar bloqueada."));
+        qrEmitter.emit("error", new Error("WhatsApp no respondió en 30 segundos. El servidor puede no tener acceso a internet."));
       }
     }, 30_000);
 
@@ -229,13 +213,9 @@ export const sessionManager = {
 
         if (!loggedOut) {
           if (!qrEverEmitted) {
-            // Connection failed before the QR was ever shown — tell the frontend
-            // so the user can retry. Do NOT reconnect silently with a new emitter
-            // (the SSE is bound to this qrEmitter and would never see those events).
             console.warn(`[WhatsApp] Tenant ${tenantId} closed before QR (code ${statusCode})`);
             qrEmitter.emit("error", new Error(`WhatsApp rechazó la conexión (código ${statusCode ?? "desconocido"}). Reintentá en unos segundos.`));
           } else {
-            // Had an active session — reconnect in background
             console.log(`[WhatsApp] Tenant ${tenantId} disconnected (code ${statusCode}), reconnecting…`);
             await new Promise((r) => setTimeout(r, 5_000));
             const newEmitter = new EventEmitter();

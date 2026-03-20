@@ -1,5 +1,5 @@
 import { useState, FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { useAuthStore } from "../../store/auth.store";
 import { IconEye, IconEyeOff } from "../../components/ui/Icons";
 
@@ -144,7 +144,14 @@ export function Login() {
         )}
       </form>
 
-      <p className="mt-8 text-xs text-gray-600">
+      <p className="mt-6 text-sm text-slate-500">
+        ¿No tenés cuenta?{" "}
+        <Link to="/register" className="text-brand font-semibold hover:text-brand-hover transition-colors">
+          Registrá tu taller gratis
+        </Link>
+      </p>
+
+      <p className="mt-4 text-xs text-gray-600">
         © {new Date().getFullYear()} TallerTrack
       </p>
     </div>
