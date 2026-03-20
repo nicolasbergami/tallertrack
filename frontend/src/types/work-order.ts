@@ -57,6 +57,7 @@ export interface WorkOrderDetail {
   vehicle_plate: string;
   vehicle_brand: string;
   vehicle_model: string;
+  quote: QuoteSummary | null;
 }
 
 // ---------------------------------------------------------------------------

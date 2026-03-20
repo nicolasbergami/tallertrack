@@ -19,8 +19,10 @@ const METHODS: { id: PaymentMethod; icon: string }[] = [
 export function PaymentModal({ order, onClose }: Props) {
   const qc = useQueryClient();
 
+  const quoteTotal = order.quote?.total ?? null;
+
   const [method,  setMethod]  = useState<PaymentMethod>("cash");
-  const [amount,  setAmount]  = useState("");
+  const [amount,  setAmount]  = useState(quoteTotal ? String(quoteTotal) : "");
   const [notes,   setNotes]   = useState("");
   const [error,   setError]   = useState("");
 
@@ -92,7 +94,18 @@ export function PaymentModal({ order, onClose }: Props) {
 
           {/* Amount */}
           <div>
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Monto cobrado</p>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Monto cobrado</p>
+              {quoteTotal && (
+                <button
+                  type="button"
+                  onClick={() => setAmount(String(quoteTotal))}
+                  className="text-[11px] text-brand hover:underline font-semibold"
+                >
+                  Total presupuesto: ${quoteTotal.toLocaleString("es-AR")}
+                </button>
+              )}
+            </div>
             <div className="relative">
               <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-lg pointer-events-none">$</span>
               <input
@@ -107,6 +120,11 @@ export function PaymentModal({ order, onClose }: Props) {
                            transition-colors"
               />
             </div>
+            {quoteTotal && parseFloat(amount) > 0 && parseFloat(amount) < quoteTotal && (
+              <p className="text-[11px] text-amber-400 mt-1.5 font-medium">
+                Saldo pendiente: ${(quoteTotal - parseFloat(amount)).toLocaleString("es-AR")}
+              </p>
+            )}
           </div>
 
           {/* Notes */}
