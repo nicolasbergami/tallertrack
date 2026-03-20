@@ -2,15 +2,18 @@
 // DiagnosisPanel — inline diagnosis + quote module
 // Visible only when work order status === "diagnosing"
 // Steps: input (voice | manual) → processing → review → sent
+//
+// Voice recording uses MediaRecorder API + backend Whisper endpoint.
+// No dependency on Google's Web Speech API servers.
 // ---------------------------------------------------------------------------
 
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { WorkOrderDetail } from "../../types/work-order";
-import { aiApi, AiQuoteDraft, QuoteItemType, SaveQuoteItem } from "../../api/ai.api";
+import { aiApi, VoiceDiagnosisResult, QuoteItemType, SaveQuoteItem } from "../../api/ai.api";
 import { IconX } from "../../components/ui/Icons";
 
-// ── Types ───────────────────────────────────────────────────────────────────
+// ── Types ────────────────────────────────────────────────────────────────────
 
 type Method = "voice" | "manual";
 type Step   = "input" | "processing" | "review" | "sent";
@@ -23,7 +26,7 @@ interface ItemRow {
   unit_price:  number;
 }
 
-// ── Constants ────────────────────────────────────────────────────────────────
+// ── Constants ─────────────────────────────────────────────────────────────────
 
 const TYPE_LABELS: Record<QuoteItemType, string> = {
   labor:            "Mano de obra",
@@ -40,16 +43,16 @@ const TYPE_COLORS: Record<QuoteItemType, string> = {
 };
 
 const PROCESSING_MSGS = [
-  "Transcribiendo audio…",
-  "Analizando con IA…",
+  "Subiendo audio…",
+  "Transcribiendo con Whisper…",
+  "Analizando diagnóstico con IA…",
   "Identificando repuestos…",
-  "Estimando tiempos de trabajo…",
   "Generando presupuesto…",
 ];
 
-const MAX_SECS = 90;
+const MAX_SECS = 120;
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function newItem(): ItemRow {
   return { _key: Date.now() + Math.random(), type: "labor", description: "", quantity: 1, unit_price: 0 };
@@ -57,6 +60,12 @@ function newItem(): ItemRow {
 
 function formatCLP(n: number) {
   return n === 0 ? "—" : `$${n.toLocaleString("es-CL")}`;
+}
+
+function getSupportedMimeType(): string {
+  if (typeof MediaRecorder === "undefined") return "";
+  const candidates = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus", "audio/ogg"];
+  return candidates.find((t) => MediaRecorder.isTypeSupported(t)) ?? "";
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -70,9 +79,6 @@ export function DiagnosisPanel({ order, onSent }: Props) {
   const [method,      setMethod]      = useState<Method>("voice");
   const [step,        setStep]        = useState<Step>("input");
   const [isRecording, setIsRecording] = useState(false);
-  const [isRetrying,  setIsRetrying]  = useState(false);
-  const [transcript,  setTranscript]  = useState("");
-  const [interim,     setInterim]     = useState("");
   const [voiceError,  setVoiceError]  = useState<string | null>(null);
   const [seconds,     setSeconds]     = useState(0);
   const [procMsgIdx,  setProcMsgIdx]  = useState(0);
@@ -80,20 +86,16 @@ export function DiagnosisPanel({ order, onSent }: Props) {
   const [items,       setItems]       = useState<ItemRow[]>([newItem()]);
   const [notes,       setNotes]       = useState("");
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const recognitionRef         = useRef<any>(null);
-  const finalRef               = useRef("");
-  const isRecordingRef         = useRef(false);
-  const hasErrorRef            = useRef(false);   // prevents onend restart loop after an error
-  const retryCountRef          = useRef(0);        // auto-retry counter for network errors
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const startRecordingRef      = useRef<(isAutoRetry?: boolean) => void>(() => {});
-  const timerRef               = useRef<ReturnType<typeof setInterval> | null>(null);
-  const procRef                = useRef<ReturnType<typeof setInterval> | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef        = useRef<Blob[]>([]);
+  const streamRef        = useRef<MediaStream | null>(null);
+  const timerRef         = useRef<ReturnType<typeof setInterval> | null>(null);
+  const procRef          = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const SR = typeof window !== "undefined"
-    ? (window.SpeechRecognition || window.webkitSpeechRecognition)
-    : null;
+  const canRecord =
+    typeof window !== "undefined" &&
+    typeof MediaRecorder !== "undefined" &&
+    !!navigator.mediaDevices?.getUserMedia;
 
   // ── Cycling processing messages ──────────────────────────────────────────
 
@@ -105,14 +107,15 @@ export function DiagnosisPanel({ order, onSent }: Props) {
     setProcMsgIdx(0);
     procRef.current = setInterval(() => {
       setProcMsgIdx((i) => (i + 1) % PROCESSING_MSGS.length);
-    }, 1200);
+    }, 1400);
     return () => { if (procRef.current) clearInterval(procRef.current); };
   }, [step]);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      recognitionRef.current?.stop();
+      mediaRecorderRef.current?.stop();
+      streamRef.current?.getTracks().forEach((t) => t.stop());
       if (timerRef.current) clearInterval(timerRef.current);
       if (procRef.current)  clearInterval(procRef.current);
     };
@@ -120,18 +123,22 @@ export function DiagnosisPanel({ order, onSent }: Props) {
 
   // ── Mutations ────────────────────────────────────────────────────────────
 
-  const extractMutation = useMutation({
-    mutationFn: (t: string) => aiApi.extractQuote(t, order.complaint),
-    onSuccess: (draft: AiQuoteDraft) => {
-      setResumen(draft.summary ?? "");
-      setNotes(draft.notes ?? "");
-      setItems(draft.items.map((it, i) => ({
-        _key:        i,
-        type:        it.type,
-        description: it.description,
-        quantity:    it.quantity,
-        unit_price:  it.unit_price_estimate,
-      })));
+  const voiceMutation = useMutation({
+    mutationFn: (blob: Blob) => aiApi.voiceDiagnosis(blob),
+    onSuccess: (result: VoiceDiagnosisResult) => {
+      setResumen(result.resumen_cliente ?? "");
+      setNotes("");
+      setItems(
+        result.items.length > 0
+          ? result.items.map((it, i) => ({
+              _key:        i,
+              type:        it.tipo === "repuesto" ? "part" : "labor",
+              description: it.descripcion,
+              quantity:    1,
+              unit_price:  it.precio_estimado,
+            }))
+          : [newItem()]
+      );
       setStep("review");
     },
     onError: () => setStep("input"),
@@ -156,98 +163,60 @@ export function DiagnosisPanel({ order, onSent }: Props) {
     },
   });
 
-  // ── Voice recording ──────────────────────────────────────────────────────
+  // ── MediaRecorder helpers ─────────────────────────────────────────────────
 
-  const stopRecording = useCallback((autoSubmit = false) => {
-    isRecordingRef.current = false;
-    hasErrorRef.current    = true;  // block any pending onend restart
-    recognitionRef.current?.stop();
+  const stopRecording = () => {
     if (timerRef.current) clearInterval(timerRef.current);
+    mediaRecorderRef.current?.stop(); // triggers onstop which uploads
     setIsRecording(false);
-    setIsRetrying(false);
-    setInterim("");
-    if (autoSubmit) {
-      const text = finalRef.current.trim();
-      if (text) { setStep("processing"); extractMutation.mutate(text); }
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  };
 
-  const startRecording = useCallback((isAutoRetry = false) => {
-    if (!SR) return;
-    if (!isAutoRetry) retryCountRef.current = 0;
-    finalRef.current       = "";
-    hasErrorRef.current    = false;
-    isRecordingRef.current = true;
-    setTranscript(""); setInterim(""); setSeconds(0); setVoiceError(null);
-    setIsRecording(true); setIsRetrying(false);
+  const startRecording = async () => {
+    setVoiceError(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
 
-    const rec = new SR();
-    rec.continuous     = true;
-    rec.interimResults = true;
-    rec.lang           = "es-CL";
-    recognitionRef.current = rec;
+      const mimeType = getSupportedMimeType();
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      chunksRef.current = [];
 
-    rec.onresult = (e) => {
-      let final = ""; let intr = "";
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        const text = e.results[i][0].transcript;
-        if (e.results[i].isFinal) { final += text + " "; } else { intr += text; }
-      }
-      if (final) { finalRef.current += final; setTranscript(finalRef.current); }
-      setInterim(intr);
-    };
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
 
-    rec.onerror = (e) => {
-      if (e.error === "network") {
-        // Transient — auto-retry once silently before showing an error
-        if (retryCountRef.current < 1) {
-          retryCountRef.current++;
-          isRecordingRef.current = false;
-          hasErrorRef.current    = false; // allow the retry
-          if (timerRef.current) clearInterval(timerRef.current);
-          setIsRecording(false);
-          setIsRetrying(true);
-          setTimeout(() => startRecordingRef.current(true), 900);
-          return;
-        }
-        // Second failure — give up and suggest manual mode
-        setVoiceError("El micrófono no pudo conectar. Usá el modo ⌨️ Manual para cargar el presupuesto.");
-      } else if (e.error === "not-allowed") {
+      recorder.onstop = () => {
+        // Release microphone immediately after stopping
+        streamRef.current?.getTracks().forEach((t) => t.stop());
+        const baseMime = (mimeType.split(";")[0] || "audio/webm") as string;
+        const blob     = new Blob(chunksRef.current, { type: baseMime });
+        setStep("processing");
+        voiceMutation.mutate(blob);
+      };
+
+      mediaRecorderRef.current = recorder;
+      recorder.start(250); // collect chunks every 250 ms
+      setIsRecording(true);
+      setSeconds(0);
+
+      timerRef.current = setInterval(() => {
+        setSeconds((s) => {
+          if (s + 1 >= MAX_SECS) { stopRecording(); return MAX_SECS; }
+          return s + 1;
+        });
+      }, 1000);
+
+    } catch (err: unknown) {
+      const name = (err as Error)?.name ?? "";
+      if (name === "NotAllowedError" || name === "PermissionDeniedError") {
         setVoiceError("Permiso de micrófono denegado. Habilítalo en la configuración del navegador.");
-      } else if (e.error !== "no-speech") {
-        setVoiceError(`Error de reconocimiento: ${e.error}. Intentá de nuevo.`);
+      } else if (name === "NotFoundError") {
+        setVoiceError("No se encontró ningún micrófono en este dispositivo.");
+      } else {
+        setVoiceError("No se pudo acceder al micrófono. Intentá de nuevo o usá el modo manual.");
       }
-      hasErrorRef.current    = true;
-      isRecordingRef.current = false;
-      if (timerRef.current) clearInterval(timerRef.current);
-      setIsRecording(false);
-      setIsRetrying(false);
-    };
-
-    rec.onend = () => {
-      // Delay + error guard prevent tight restart loops that freeze mobile
-      if (recognitionRef.current === rec && isRecordingRef.current && !hasErrorRef.current) {
-        setTimeout(() => {
-          if (isRecordingRef.current && !hasErrorRef.current) {
-            try { rec.start(); } catch (_) { /* already started */ }
-          }
-        }, 200);
-      }
-    };
-
-    rec.start();
-
-    timerRef.current = setInterval(() => {
-      setSeconds((s) => {
-        if (s + 1 >= MAX_SECS) { stopRecording(true); return MAX_SECS; }
-        return s + 1;
-      });
-    }, 1000);
-  }, [SR, stopRecording]);
-
-  // Keep ref in sync so onerror can call startRecording without a circular dep
-  useEffect(() => { startRecordingRef.current = startRecording; }, [startRecording]);
+    }
+  };
 
   // ── Item helpers ─────────────────────────────────────────────────────────
 
@@ -257,17 +226,14 @@ export function DiagnosisPanel({ order, onSent }: Props) {
   const removeItem = (key: number) =>
     setItems((prev) => prev.filter((it) => it._key !== key));
 
-  const subtotal = items.reduce((s, it) => s + it.quantity * it.unit_price, 0);
-  const tax      = Math.round(subtotal * 0.19);
-  const total    = subtotal + tax;
-
+  const subtotal    = items.reduce((s, it) => s + it.quantity * it.unit_price, 0);
+  const tax         = Math.round(subtotal * 0.19);
+  const total       = subtotal + tax;
   const progressPct = Math.min((seconds / MAX_SECS) * 100, 100);
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // Render
-  // ─────────────────────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────────────
 
-  // ── Sent ──────────────────────────────────────────────────────────────────
+  // ─ Sent ───────────────────────────────────────────────────────────────────
   if (step === "sent") {
     return (
       <section className="mx-4 mt-4 bg-violet-950/30 border border-violet-500/40 rounded-2xl
@@ -289,7 +255,7 @@ export function DiagnosisPanel({ order, onSent }: Props) {
     );
   }
 
-  // ── Processing ────────────────────────────────────────────────────────────
+  // ─ Processing ─────────────────────────────────────────────────────────────
   if (step === "processing") {
     return (
       <section className="mx-4 mt-4 bg-surface-card border border-surface-border rounded-2xl
@@ -302,18 +268,16 @@ export function DiagnosisPanel({ order, onSent }: Props) {
                style={{ animationDirection: "reverse", animationDuration: "0.8s" }} />
           <div className="absolute inset-0 flex items-center justify-center text-2xl">⚙️</div>
         </div>
-
         <div className="text-center">
           <p className="text-slate-200 font-semibold text-base min-h-[1.5rem]">
             {PROCESSING_MSGS[procMsgIdx]}
           </p>
           <p className="text-slate-500 text-sm mt-1">Esto puede tardar unos segundos</p>
         </div>
-
-        {extractMutation.isError && (
+        {voiceMutation.isError && (
           <div className="rounded-xl bg-red-950/40 border border-red-800/50 px-4 py-3 w-full">
             <p className="text-red-400 text-sm text-center">
-              {(extractMutation.error as Error).message}
+              {(voiceMutation.error as Error).message}
             </p>
             <button onClick={() => setStep("input")}
                     className="mt-2 w-full text-xs text-red-300 underline text-center">
@@ -325,11 +289,10 @@ export function DiagnosisPanel({ order, onSent }: Props) {
     );
   }
 
-  // ── Review ────────────────────────────────────────────────────────────────
+  // ─ Review ─────────────────────────────────────────────────────────────────
   if (step === "review") {
     return (
       <section className="mx-4 mt-4 flex flex-col gap-3">
-        {/* Header row */}
         <div className="flex items-center justify-between">
           <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest">
             Revisión del presupuesto
@@ -378,7 +341,6 @@ export function DiagnosisPanel({ order, onSent }: Props) {
               const priceZero = it.unit_price === 0;
               return (
                 <div key={it._key} className={priceZero ? "bg-orange-950/15" : ""}>
-                  {/* Type + badge + delete */}
                   <div className="flex items-center gap-2 px-3 pt-2.5 pb-1">
                     <select
                       value={it.type}
@@ -402,7 +364,6 @@ export function DiagnosisPanel({ order, onSent }: Props) {
                     </button>
                   </div>
 
-                  {/* Description */}
                   <input
                     type="text"
                     value={it.description}
@@ -412,7 +373,6 @@ export function DiagnosisPanel({ order, onSent }: Props) {
                                placeholder-slate-600 focus:outline-none"
                   />
 
-                  {/* Qty + Price */}
                   <div className="flex border-t border-surface-border/30">
                     <div className="flex-1 flex items-center gap-2 px-3 py-2 border-r border-surface-border/30">
                       <span className="text-[10px] text-slate-600 font-semibold uppercase">Cant.</span>
@@ -424,12 +384,8 @@ export function DiagnosisPanel({ order, onSent }: Props) {
                                    focus:outline-none w-10 tabular-nums"
                       />
                     </div>
-                    <div className={`flex-1 flex items-center gap-2 px-3 py-2 ${
-                      priceZero ? "bg-orange-950/30" : ""
-                    }`}>
-                      <span className={`text-[10px] font-semibold uppercase ${
-                        priceZero ? "text-orange-500" : "text-slate-600"
-                      }`}>
+                    <div className={`flex-1 flex items-center gap-2 px-3 py-2 ${priceZero ? "bg-orange-950/30" : ""}`}>
+                      <span className={`text-[10px] font-semibold uppercase ${priceZero ? "text-orange-500" : "text-slate-600"}`}>
                         $ P.U.
                       </span>
                       <input
@@ -447,7 +403,6 @@ export function DiagnosisPanel({ order, onSent }: Props) {
             })}
           </div>
 
-          {/* Totals */}
           {subtotal > 0 && (
             <div className="border-t border-surface-border/60">
               <div className="flex justify-between px-4 py-1.5 border-b border-surface-border/40">
@@ -460,22 +415,19 @@ export function DiagnosisPanel({ order, onSent }: Props) {
               </div>
               <div className="flex justify-between px-4 py-2.5">
                 <span className="text-sm font-bold text-slate-200">Total</span>
-                <span className="text-base font-black text-brand tabular-nums font-mono">
-                  {formatCLP(total)}
-                </span>
+                <span className="text-base font-black text-brand tabular-nums font-mono">{formatCLP(total)}</span>
               </div>
             </div>
           )}
         </div>
 
-        {/* Error */}
         {saveMutation.isError && (
           <div className="rounded-xl bg-red-950/40 border border-red-800/50 px-4 py-3">
             <p className="text-red-400 text-sm">{(saveMutation.error as Error).message}</p>
           </div>
         )}
 
-        {/* CTA */}
+        {/* Send CTA */}
         <button
           onClick={() => saveMutation.mutate()}
           disabled={items.length === 0 || saveMutation.isPending}
@@ -483,17 +435,15 @@ export function DiagnosisPanel({ order, onSent }: Props) {
                      font-bold text-white text-[15px] active:scale-[0.98] transition-transform
                      disabled:opacity-50"
           style={{
-            background:  "linear-gradient(135deg, #EA580C 0%, #F97316 50%, #C2410C 100%)",
-            boxShadow:   "0 4px 24px rgba(249,115,22,0.45), inset 0 1px 0 rgba(255,255,255,0.12)",
+            background: "linear-gradient(135deg, #EA580C 0%, #F97316 50%, #C2410C 100%)",
+            boxShadow:  "0 4px 24px rgba(249,115,22,0.45), inset 0 1px 0 rgba(255,255,255,0.12)",
           }}
         >
           {saveMutation.isPending ? (
             <>
               <svg className="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10"
-                        stroke="currentColor" strokeWidth="4"/>
-                <path className="opacity-75" fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
               </svg>
               Enviando…
             </>
@@ -501,8 +451,7 @@ export function DiagnosisPanel({ order, onSent }: Props) {
             <>
               <svg className="w-5 h-5 opacity-90 flex-shrink-0" fill="none" viewBox="0 0 24 24"
                    stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round"
-                      d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
               </svg>
               <div className="flex flex-col items-start leading-tight">
                 <span className="text-orange-200/70 text-[10px] font-semibold uppercase tracking-widest">
@@ -515,14 +464,12 @@ export function DiagnosisPanel({ order, onSent }: Props) {
             </>
           )}
         </button>
-
-        {/* Bottom spacer so CTA clears the ActionBar */}
         <div className="h-2" />
       </section>
     );
   }
 
-  // ── Input step ────────────────────────────────────────────────────────────
+  // ─ Input step ─────────────────────────────────────────────────────────────
   return (
     <section className="mx-4 mt-4 flex flex-col gap-3">
 
@@ -550,28 +497,15 @@ export function DiagnosisPanel({ order, onSent }: Props) {
       {/* ─ Voice mode ─ */}
       {method === "voice" && (
         <div className="flex flex-col items-center gap-4 py-2">
-          {!SR ? (
+          {!canRecord ? (
             <div className="rounded-xl bg-amber-950/40 border border-amber-800/50 px-4 py-3 w-full">
               <p className="text-amber-300 text-sm text-center">
-                Tu navegador no soporta reconocimiento de voz. Usa Chrome o Edge.
+                Tu navegador no soporta grabación de audio. Usá el modo manual o Chrome/Safari actualizados.
               </p>
             </div>
           ) : (
             <>
-              {/* Transcript box */}
-              {(transcript || interim || isRecording) && (
-                <div className="w-full min-h-[4.5rem] rounded-xl bg-surface-raised border border-surface-border p-3">
-                  <p className="text-sm text-slate-200 leading-relaxed">
-                    {transcript}
-                    {interim && <span className="text-slate-500 italic"> {interim}</span>}
-                    {isRecording && !transcript && !interim && (
-                      <span className="text-slate-600 italic">Escuchando…</span>
-                    )}
-                  </p>
-                </div>
-              )}
-
-              {/* Progress bar while recording */}
+              {/* Timer bar while recording */}
               {isRecording && (
                 <div className="flex items-center gap-3 w-full">
                   <div className="flex-1 h-1 rounded-full bg-surface-raised overflow-hidden">
@@ -586,79 +520,43 @@ export function DiagnosisPanel({ order, onSent }: Props) {
                 </div>
               )}
 
-              {/* Big circular mic button / retrying spinner */}
-              {isRetrying ? (
-                <div className="w-24 h-24 rounded-full flex items-center justify-center border-4
-                                border-slate-600 bg-surface-raised">
-                  <svg className="animate-spin w-9 h-9 text-slate-400" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10"
-                            stroke="currentColor" strokeWidth="4"/>
-                    <path className="opacity-75" fill="currentColor"
-                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+              {/* Big circular mic / stop button */}
+              <button
+                onClick={() => isRecording ? stopRecording() : startRecording()}
+                className={`w-24 h-24 rounded-full flex items-center justify-center border-4
+                            transition-all duration-200 active:scale-95
+                            ${isRecording
+                              ? "bg-red-600/30 border-red-500 shadow-[0_0_40px_rgba(239,68,68,0.4)]"
+                              : "bg-brand/20 border-brand shadow-[0_0_30px_rgba(249,115,22,0.25)] hover:bg-brand/30"
+                            }`}
+              >
+                {isRecording ? (
+                  <svg className="w-8 h-8 text-red-400" fill="currentColor" viewBox="0 0 24 24">
+                    <rect x="6" y="6" width="12" height="12" rx="2" />
                   </svg>
-                </div>
-              ) : (
-                <button
-                  onClick={() => isRecording ? stopRecording(true) : startRecording()}
-                  className={`w-24 h-24 rounded-full flex items-center justify-center border-4
-                              transition-all duration-200 active:scale-95
-                              ${isRecording
-                                ? "bg-red-600/30 border-red-500 shadow-[0_0_40px_rgba(239,68,68,0.4)]"
-                                : "bg-brand/20 border-brand shadow-[0_0_30px_rgba(249,115,22,0.25)] hover:bg-brand/30"
-                              }`}
-                >
-                  {isRecording ? (
-                    <svg className="w-8 h-8 text-red-400" fill="currentColor" viewBox="0 0 24 24">
-                      <rect x="6" y="6" width="12" height="12" rx="2" />
-                    </svg>
-                  ) : (
-                    <svg className="w-9 h-9 text-brand" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
-                      <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
-                    </svg>
-                  )}
-                </button>
-              )}
+                ) : (
+                  <svg className="w-9 h-9 text-brand" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+                    <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+                  </svg>
+                )}
+              </button>
 
-              <p className={`text-sm font-semibold transition-colors ${
-                isRetrying  ? "text-slate-500" :
-                isRecording ? "text-red-400"   : "text-slate-500"
-              }`}>
-                {isRetrying  ? "Reconectando…" :
-                 isRecording ? "Grabando… toca para detener y analizar" :
-                               "Toca para grabar el diagnóstico"}
+              <p className={`text-sm font-semibold ${isRecording ? "text-red-400" : "text-slate-500"}`}>
+                {isRecording
+                  ? "Grabando… toca para detener y analizar"
+                  : "Toca para grabar el diagnóstico"}
               </p>
 
-              {/* Cancel button — always visible while recording so mobile can always escape */}
-              {(isRecording || isRetrying) && (
+              {/* Always-visible cancel while recording */}
+              {isRecording && (
                 <button
-                  onClick={() => stopRecording(false)}
+                  onClick={stopRecording}
                   className="w-full h-11 rounded-xl border border-red-800/60 bg-red-950/30
                              text-red-400 text-sm font-semibold active:scale-95 transition-all"
                 >
-                  Cancelar grabación
+                  Detener y analizar
                 </button>
-              )}
-
-              {/* Analyze button once transcript is ready */}
-              {!isRecording && transcript && (
-                <div className="flex gap-2 w-full">
-                  <button
-                    onClick={() => { finalRef.current = ""; setTranscript(""); setInterim(""); }}
-                    className="h-11 px-4 rounded-xl border border-surface-border
-                               text-slate-400 hover:text-slate-200 text-sm font-semibold"
-                  >
-                    Regrabar
-                  </button>
-                  <button
-                    onClick={() => { setStep("processing"); extractMutation.mutate(transcript.trim()); }}
-                    className="flex-1 h-11 rounded-xl text-white font-bold text-sm
-                               active:scale-95 transition-all"
-                    style={{ background: "linear-gradient(135deg, #EA580C 0%, #F97316 100%)" }}
-                  >
-                    Analizar con IA →
-                  </button>
-                </div>
               )}
             </>
           )}
@@ -681,7 +579,6 @@ export function DiagnosisPanel({ order, onSent }: Props) {
       {/* ─ Manual mode ─ */}
       {method === "manual" && (
         <div className="flex flex-col gap-3">
-          {/* Resumen cliente */}
           <div>
             <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-1.5">
               Resumen para el cliente
@@ -697,7 +594,6 @@ export function DiagnosisPanel({ order, onSent }: Props) {
             />
           </div>
 
-          {/* Items */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest">
@@ -732,7 +628,6 @@ export function DiagnosisPanel({ order, onSent }: Props) {
                         <IconX className="w-3.5 h-3.5" />
                       </button>
                     </div>
-
                     <input
                       type="text"
                       value={it.description}
@@ -741,7 +636,6 @@ export function DiagnosisPanel({ order, onSent }: Props) {
                       className="w-full bg-transparent px-3 pb-2 text-sm text-slate-200
                                  placeholder-slate-600 focus:outline-none"
                     />
-
                     <div className="flex border-t border-surface-border/30">
                       <div className="flex-1 flex items-center gap-2 px-3 py-2 border-r border-surface-border/30">
                         <span className="text-[10px] text-slate-600 font-semibold uppercase">Cant.</span>
@@ -770,7 +664,6 @@ export function DiagnosisPanel({ order, onSent }: Props) {
             </div>
           </div>
 
-          {/* Go to review */}
           <button
             onClick={() => setStep("review")}
             disabled={items.every((it) => !it.description.trim())}

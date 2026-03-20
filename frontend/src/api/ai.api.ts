@@ -34,6 +34,18 @@ export interface SaveQuoteItem {
   unit_price:  number;
 }
 
+export interface VoiceDiagnosisItem {
+  descripcion:     string;
+  tipo:            "repuesto" | "mano_obra";
+  precio_estimado: number;
+}
+
+export interface VoiceDiagnosisResult {
+  transcripcion:   string;
+  items:           VoiceDiagnosisItem[];
+  resumen_cliente: string;
+}
+
 // ---------------------------------------------------------------------------
 // API calls
 // ---------------------------------------------------------------------------
@@ -53,4 +65,14 @@ export const aiApi = {
   /** Persist an AI-generated quote on a work order */
   saveQuote: (workOrderId: string, items: SaveQuoteItem[], notes?: string, resumen_cliente?: string) =>
     api.post(`/work-orders/${workOrderId}/quotes`, { items, notes, resumen_cliente }),
+
+  /** Upload audio blob → Whisper transcription + Claude Haiku item extraction */
+  voiceDiagnosis: (audioBlob: Blob) => {
+    const form = new FormData();
+    // Strip codec parameter (e.g. "audio/webm;codecs=opus" → "audio/webm") so multer accepts it
+    const baseMime = audioBlob.type.split(";")[0] || "audio/webm";
+    const ext      = baseMime.split("/")[1] || "webm";
+    form.append("audio", new Blob([audioBlob], { type: baseMime }), `recording.${ext}`);
+    return api.postForm<VoiceDiagnosisResult>("/ai/voice-diagnosis", form);
+  },
 };
