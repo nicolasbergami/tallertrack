@@ -3,10 +3,10 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { AppShell } from "../../components/layout/AppShell";
 import { workOrdersApi } from "../../api/work-orders.api";
-import { StatusBadge } from "../../components/ui/StatusBadge";
-import { formatElapsed } from "../../config/status.config";
+import { getStatusConfig, ACTIVE_STATUSES } from "../../config/status.config";
 import { IconSearch, IconX } from "../../components/ui/Icons";
-import { WorkOrderDetail } from "../../types/work-order";
+import { WorkOrderDetail, WorkOrderStatus } from "../../types/work-order";
+import { PlateVisual } from "../../components/ui/PlateVisual";
 
 export function History() {
   const navigate = useNavigate();
@@ -150,6 +150,26 @@ export function History() {
   );
 }
 
+// ── Live badge — pulses if the state is active ───────────────────────────────
+
+function LiveBadge({ status }: { status: WorkOrderStatus }) {
+  const cfg    = getStatusConfig(status);
+  const isLive = (ACTIVE_STATUSES as string[]).includes(status);
+  return (
+    <span
+      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border
+                  text-[10px] font-bold whitespace-nowrap flex-shrink-0
+                  ${cfg.bgColor} ${cfg.textColor} ${cfg.borderColor}`}
+    >
+      <span
+        className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${cfg.dotColor}
+                    ${isLive ? "animate-pulse" : ""}`}
+      />
+      {cfg.shortLabel}
+    </span>
+  );
+}
+
 // ── Row component ─────────────────────────────────────────────────────────────
 
 function HistoryRow({
@@ -159,53 +179,46 @@ function HistoryRow({
   search: string;
   onPress: () => void;
 }) {
+  const date = new Date(order.received_at);
+
   return (
     <button
       onClick={onPress}
-      className="flex items-center gap-3 py-3 px-2 -mx-2 border-b border-surface-border/40
-                 last:border-b-0 text-left rounded-xl transition-colors
-                 hover:bg-surface-card/50 active:scale-[0.99] touch-feedback"
+      className="flex items-center gap-3 py-2.5 px-2 -mx-2 border-b border-surface-border/40
+                 last:border-b-0 text-left rounded-xl transition-all
+                 hover:bg-surface-card/60 active:scale-[0.99] touch-feedback"
     >
       {/* Date column */}
-      <div className="flex-shrink-0 w-9 text-center">
-        <p className="text-base font-black text-slate-300 leading-none">
-          {new Date(order.received_at).getDate()}
-        </p>
+      <div className="flex-shrink-0 w-8 text-center">
+        <p className="text-base font-black text-slate-300 leading-none">{date.getDate()}</p>
         <p className="text-[10px] text-slate-600 uppercase tracking-wide">
-          {new Date(order.received_at).toLocaleDateString("es-AR", { month: "short" })}
+          {date.toLocaleDateString("es-AR", { month: "short" })}
         </p>
       </div>
 
       {/* Divider */}
-      <div className="w-px h-8 bg-surface-border/60 flex-shrink-0" />
+      <div className="w-px h-10 bg-surface-border/60 flex-shrink-0" />
 
-      {/* Info */}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <span className="font-mono font-black text-sm text-slate-100 tracking-widest">
-            <Highlight text={order.vehicle_plate} query={search} />
-          </span>
-          <span className="text-slate-500 text-xs truncate">
-            <Highlight text={`${order.vehicle_brand} ${order.vehicle_model}`} query={search} />
-          </span>
-        </div>
-        <div className="flex items-center gap-2 mt-0.5">
-          <StatusBadge status={order.status} size="sm" showDot={false} />
-          <span className="text-slate-600 text-[11px] font-mono">
-            <Highlight text={order.order_number ?? ""} query={search} />
-          </span>
-          {order.client_name && (
-            <span className="text-slate-600 text-[11px] truncate ml-1">
-              · <Highlight text={order.client_name} query={search} />
-            </span>
-          )}
-        </div>
+      {/* Plate visual */}
+      <PlateVisual plate={order.vehicle_plate} size="sm" />
+
+      {/* Info: vehicle / client / OT */}
+      <div className="flex-1 min-w-0 flex flex-col gap-0.5">
+        <p className="text-sm font-bold text-slate-200 truncate leading-snug">
+          <Highlight text={`${order.vehicle_brand} ${order.vehicle_model}`} query={search} />
+        </p>
+        <p className="text-xs text-slate-400 truncate leading-snug">
+          {order.client_name
+            ? <Highlight text={order.client_name} query={search} />
+            : <span className="text-slate-600">Sin cliente</span>}
+        </p>
+        <p className="font-mono text-[10px] text-slate-600 leading-snug">
+          <Highlight text={order.order_number ?? ""} query={search} />
+        </p>
       </div>
 
-      {/* Elapsed */}
-      <span className="text-[11px] text-slate-600 flex-shrink-0 font-mono">
-        {formatElapsed(order.received_at)}
-      </span>
+      {/* Status badge */}
+      <LiveBadge status={order.status} />
     </button>
   );
 }
