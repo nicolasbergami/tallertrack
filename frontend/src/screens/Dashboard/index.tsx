@@ -16,9 +16,10 @@ const STALE_MS = 8 * 3600 * 1000; // 8 hours
 export function Dashboard() {
   const navigate  = useNavigate();
   const tenantName = useAuthStore((s) => s.user?.tenantName ?? "");
-  const [search,    setSearch]    = useState("");
-  const [activeTab, setActiveTab] = useState<WorkOrderStatus | "all">("all");
-  const [viewMode,  setViewMode]  = useState<"list" | "kanban">("list");
+  const [search,         setSearch]         = useState("");
+  const [activeTab,      setActiveTab]      = useState<WorkOrderStatus | "all">("all");
+  const [viewMode,       setViewMode]       = useState<"list" | "kanban">("list");
+  const [mechanicFilter, setMechanicFilter] = useState<string | null>(null);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["work-orders"],
@@ -36,6 +37,13 @@ export function Dashboard() {
     const map: Partial<Record<WorkOrderStatus, number>> = {};
     activeOrders.forEach((o) => { map[o.status] = (map[o.status] ?? 0) + 1; });
     return map;
+  }, [activeOrders]);
+
+  // Unique mechanics with at least one active order (sorted)
+  const mechanics = useMemo(() => {
+    const names = new Set<string>();
+    activeOrders.forEach((o) => { if (o.assigned_user_name) names.add(o.assigned_user_name); });
+    return Array.from(names).sort();
   }, [activeOrders]);
 
   const stats = useMemo(() => {
@@ -57,15 +65,19 @@ export function Dashboard() {
       const q = search.trim().toUpperCase();
       list = list.filter(o =>
         o.vehicle_plate.toUpperCase().includes(q) ||
-        (o.client_name  ?? "").toUpperCase().includes(q) ||
-        (o.order_number ?? "").toUpperCase().includes(q),
+        (o.client_name        ?? "").toUpperCase().includes(q) ||
+        (o.order_number       ?? "").toUpperCase().includes(q) ||
+        (o.assigned_user_name ?? "").toUpperCase().includes(q),
       );
     }
     if (activeTab !== "all") {
       list = list.filter(o => o.status === activeTab);
     }
+    if (mechanicFilter) {
+      list = list.filter(o => o.assigned_user_name === mechanicFilter);
+    }
     return list;
-  }, [activeOrders, search, activeTab]);
+  }, [activeOrders, search, activeTab, mechanicFilter]);
 
   // Smart sections — only when "all" tab is active and no search query
   const sections = useMemo(() => {
@@ -208,6 +220,25 @@ export function Dashboard() {
                   />
                 );
               })}
+          </div>
+        )}
+
+        {/* ── Mechanic filter chips — only when there are assigned orders ── */}
+        {!isLoading && mechanics.length > 0 && (
+          <div className="flex overflow-x-auto gap-2 px-4 py-2.5 border-b border-surface-border scrollbar-hide">
+            <MechanicChip
+              label="Todos"
+              active={mechanicFilter === null}
+              onClick={() => setMechanicFilter(null)}
+            />
+            {mechanics.map((name) => (
+              <MechanicChip
+                key={name}
+                label={name}
+                active={mechanicFilter === name}
+                onClick={() => setMechanicFilter(mechanicFilter === name ? null : name)}
+              />
+            ))}
           </div>
         )}
 
@@ -641,6 +672,31 @@ function CarOnLiftSVG() {
         </radialGradient>
       </defs>
     </svg>
+  );
+}
+
+function MechanicChip({
+  label, active, onClick,
+}: { label: string; active: boolean; onClick: () => void }) {
+  const initials = label === "Todos" ? null : label.split(" ").slice(0, 2).map((n) => n[0]).join("").toUpperCase();
+  return (
+    <button
+      onClick={onClick}
+      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold
+                  flex-shrink-0 transition-all active:scale-95
+                  ${active
+                    ? "bg-brand text-white"
+                    : "bg-surface-card border border-surface-border text-slate-400 hover:border-slate-500 hover:text-slate-300"
+                  }`}
+    >
+      {initials && (
+        <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-black
+                          ${active ? "bg-white/20" : "bg-surface-raised"}`}>
+          {initials}
+        </span>
+      )}
+      {label}
+    </button>
   );
 }
 

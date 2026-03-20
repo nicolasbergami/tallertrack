@@ -10,7 +10,8 @@ import { PlateVisual } from "../../components/ui/PlateVisual";
 
 export function History() {
   const navigate = useNavigate();
-  const [search, setSearch] = useState("");
+  const [search,         setSearch]         = useState("");
+  const [mechanicFilter, setMechanicFilter] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ["work-orders-all"],
@@ -25,17 +26,31 @@ export function History() {
     [data],
   );
 
+  // Unique mechanics present in the loaded orders (sorted by name)
+  const mechanics = useMemo(() => {
+    const names = new Set<string>();
+    allOrders.forEach((o) => { if (o.assigned_user_name) names.add(o.assigned_user_name); });
+    return Array.from(names).sort();
+  }, [allOrders]);
+
   const filtered = useMemo(() => {
     const q = search.trim().toUpperCase();
-    if (!q) return allOrders;
-    return allOrders.filter((o) =>
-      o.vehicle_plate.toUpperCase().includes(q) ||
-      (o.client_name   ?? "").toUpperCase().includes(q) ||
-      (o.order_number  ?? "").toUpperCase().includes(q) ||
-      (o.vehicle_brand ?? "").toUpperCase().includes(q) ||
-      (o.vehicle_model ?? "").toUpperCase().includes(q),
-    );
-  }, [allOrders, search]);
+    let list = allOrders;
+    if (q) {
+      list = list.filter((o) =>
+        o.vehicle_plate.toUpperCase().includes(q) ||
+        (o.client_name        ?? "").toUpperCase().includes(q) ||
+        (o.order_number       ?? "").toUpperCase().includes(q) ||
+        (o.vehicle_brand      ?? "").toUpperCase().includes(q) ||
+        (o.vehicle_model      ?? "").toUpperCase().includes(q) ||
+        (o.assigned_user_name ?? "").toUpperCase().includes(q),
+      );
+    }
+    if (mechanicFilter) {
+      list = list.filter((o) => o.assigned_user_name === mechanicFilter);
+    }
+    return list;
+  }, [allOrders, search, mechanicFilter]);
 
   // Group visible orders by month for sectioned display
   const grouped = useMemo(() => {
@@ -53,32 +68,55 @@ export function History() {
       <div className="flex flex-col">
 
         {/* ── Search bar ── */}
-        <div className="px-4 py-3 sticky top-[3.5rem] z-30 bg-surface/95 backdrop-blur border-b border-surface-border">
-          <div className="relative">
-            <IconSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar patente, cliente, marca, OT…"
-              className="w-full h-10 bg-surface-card border border-surface-border rounded-xl
-                         pl-10 pr-9 text-sm text-slate-100 placeholder-slate-500
-                         focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent
-                         transition-colors"
-            />
-            {search && (
-              <button
-                onClick={() => setSearch("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
-              >
-                <IconX className="w-4 h-4" />
-              </button>
-            )}
+        <div className="sticky top-[3.5rem] z-30 bg-surface/95 backdrop-blur border-b border-surface-border">
+          <div className="px-4 pt-3 pb-2">
+            <div className="relative">
+              <IconSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Buscar patente, cliente, mecánico, OT…"
+                className="w-full h-10 bg-surface-card border border-surface-border rounded-xl
+                           pl-10 pr-9 text-sm text-slate-100 placeholder-slate-500
+                           focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent
+                           transition-colors"
+              />
+              {search && (
+                <button
+                  onClick={() => setSearch("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
+                >
+                  <IconX className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+            <p className="text-[11px] text-slate-600 mt-1.5">
+              {data?.total ?? 0} órdenes en total
+              {(search || mechanicFilter)
+                ? ` · ${filtered.length} resultado${filtered.length !== 1 ? "s" : ""}`
+                : ""}
+            </p>
           </div>
-          <p className="text-[11px] text-slate-600 mt-1.5">
-            {data?.total ?? 0} órdenes en total
-            {search ? ` · ${filtered.length} resultado${filtered.length !== 1 ? "s" : ""}` : ""}
-          </p>
+
+          {/* ── Mechanic filter chips ── */}
+          {mechanics.length > 0 && (
+            <div className="flex overflow-x-auto gap-2 px-4 pb-3 scrollbar-hide">
+              <MechanicChip
+                label="Todos"
+                active={mechanicFilter === null}
+                onClick={() => setMechanicFilter(null)}
+              />
+              {mechanics.map((name) => (
+                <MechanicChip
+                  key={name}
+                  label={name}
+                  active={mechanicFilter === name}
+                  onClick={() => setMechanicFilter(mechanicFilter === name ? null : name)}
+                />
+              ))}
+            </div>
+          )}
         </div>
 
         {/* ── Loading skeletons ── */}
@@ -110,12 +148,15 @@ export function History() {
               <IconSearch className="w-5 h-5 text-slate-600" />
             </div>
             <div>
-              <p className="text-slate-400 font-semibold text-sm">Sin resultados para "{search}"</p>
+              <p className="text-slate-400 font-semibold text-sm">
+                Sin resultados
+                {mechanicFilter ? ` para ${mechanicFilter}` : search ? ` para "${search}"` : ""}
+              </p>
               <button
-                onClick={() => setSearch("")}
+                onClick={() => { setSearch(""); setMechanicFilter(null); }}
                 className="text-brand text-xs mt-1 hover:underline"
               >
-                Limpiar búsqueda
+                Limpiar filtros
               </button>
             </div>
           </div>
@@ -240,5 +281,31 @@ function Highlight({ text, query }: { text: string; query: string }) {
       </mark>
       {text.slice(idx + q.length)}
     </>
+  );
+}
+
+// ── Mechanic filter chip ───────────────────────────────────────────────────
+function MechanicChip({
+  label, active, onClick,
+}: { label: string; active: boolean; onClick: () => void }) {
+  const initials = label === "Todos" ? null : label.split(" ").slice(0, 2).map((n) => n[0]).join("").toUpperCase();
+  return (
+    <button
+      onClick={onClick}
+      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold
+                  flex-shrink-0 transition-all active:scale-95
+                  ${active
+                    ? "bg-brand text-white"
+                    : "bg-surface-card border border-surface-border text-slate-400 hover:border-slate-500 hover:text-slate-300"
+                  }`}
+    >
+      {initials && (
+        <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-black
+                          ${active ? "bg-white/20" : "bg-surface-raised"}`}>
+          {initials}
+        </span>
+      )}
+      {label}
+    </button>
   );
 }
