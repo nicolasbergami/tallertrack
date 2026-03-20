@@ -11,7 +11,7 @@ export interface QRCodeResult {
  * Generates a QR code that points to the public tracking URL for a work order.
  *
  * Tracking URL format:
- *   https://tallertrack-production.up.railway.app/{tenantSlug}/{orderNumber}
+ *   https://tallertrack-production.up.railway.app/track/{tenantSlug}/{orderNumber}
  *
  * The public page does NOT require authentication — clients can scan it to
  * see real-time status updates without logging in.
@@ -21,7 +21,7 @@ export const qrService = {
     tenantSlug: string,
     orderNumber: string
   ): Promise<QRCodeResult> {
-    const url = `${env.TRACKING_BASE_URL}/${tenantSlug}/${encodeURIComponent(orderNumber)}`;
+    const url = `${env.TRACKING_BASE_URL}/track/${tenantSlug}/${encodeURIComponent(orderNumber)}`;
 
     const pngBuffer = await QRCode.toBuffer(url, {
       type: "png",

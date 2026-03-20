@@ -285,7 +285,7 @@ export const workOrderService = {
     const phone = normalizeArgentinePhone(workOrder.client_phone);
 
     const { slug: tenantSlug, name: workshopName } = await getTenantInfo(tenantId);
-    const trackingUrl = `${env.TRACKING_BASE_URL}/${tenantSlug}/${encodeURIComponent(workOrder.order_number)}`;
+    const trackingUrl = `${env.TRACKING_BASE_URL}/track/${tenantSlug}/${encodeURIComponent(workOrder.order_number)}`;
 
     const message = buildMessage(newStatus, phone, {
       clientName:   workOrder.client_name,
