@@ -83,6 +83,7 @@ export function DiagnosisPanel({ order, onSent }: Props) {
   const recognitionRef  = useRef<any>(null);
   const finalRef        = useRef("");
   const isRecordingRef  = useRef(false);
+  const hasErrorRef     = useRef(false);   // prevents onend restart loop after an error
   const timerRef        = useRef<ReturnType<typeof setInterval> | null>(null);
   const procRef         = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -155,6 +156,7 @@ export function DiagnosisPanel({ order, onSent }: Props) {
 
   const stopRecording = useCallback((autoSubmit = false) => {
     isRecordingRef.current = false;
+    hasErrorRef.current    = true;  // block any pending onend restart
     recognitionRef.current?.stop();
     if (timerRef.current) clearInterval(timerRef.current);
     setIsRecording(false);
@@ -168,7 +170,8 @@ export function DiagnosisPanel({ order, onSent }: Props) {
 
   const startRecording = useCallback(() => {
     if (!SR) return;
-    finalRef.current = "";
+    finalRef.current    = "";
+    hasErrorRef.current = false;
     isRecordingRef.current = true;
     setTranscript(""); setInterim(""); setSeconds(0); setVoiceError(null); setIsRecording(true);
 
@@ -191,16 +194,25 @@ export function DiagnosisPanel({ order, onSent }: Props) {
     rec.onerror = (e) => {
       if (e.error === "not-allowed") {
         setVoiceError("Permiso de micrófono denegado. Habilítalo en la configuración del navegador.");
+      } else if (e.error === "network") {
+        setVoiceError("Sin conexión con el servidor de voz. Verificá tu conexión a internet e intentá de nuevo.");
       } else if (e.error !== "no-speech") {
-        setVoiceError(`Error: ${e.error}`);
+        setVoiceError(`Error de reconocimiento: ${e.error}. Intentá de nuevo.`);
       }
+      hasErrorRef.current    = true;   // prevent onend from restarting
       isRecordingRef.current = false;
+      if (timerRef.current) clearInterval(timerRef.current);
       setIsRecording(false);
     };
 
     rec.onend = () => {
-      if (recognitionRef.current === rec && isRecordingRef.current) {
-        try { rec.start(); } catch (_) { /* already started */ }
+      // Delay + error guard prevent tight restart loops that freeze mobile
+      if (recognitionRef.current === rec && isRecordingRef.current && !hasErrorRef.current) {
+        setTimeout(() => {
+          if (isRecordingRef.current && !hasErrorRef.current) {
+            try { rec.start(); } catch (_) { /* already started */ }
+          }
+        }, 200);
       }
     };
 
@@ -578,6 +590,17 @@ export function DiagnosisPanel({ order, onSent }: Props) {
               }`}>
                 {isRecording ? "Grabando… toca para detener y analizar" : "Toca para grabar el diagnóstico"}
               </p>
+
+              {/* Cancel button — always visible while recording so mobile can escape */}
+              {isRecording && (
+                <button
+                  onClick={() => stopRecording(false)}
+                  className="w-full h-11 rounded-xl border border-red-800/60 bg-red-950/30
+                             text-red-400 text-sm font-semibold active:scale-95 transition-all"
+                >
+                  Cancelar grabación
+                </button>
+              )}
 
               {/* Analyze button once transcript is ready */}
               {!isRecording && transcript && (

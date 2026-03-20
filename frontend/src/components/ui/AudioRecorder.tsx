@@ -120,8 +120,10 @@ export function AudioRecorder({ onTranscriptReady, onError }: Props) {
     recognition.onerror = (e) => {
       if (e.error === "not-allowed") {
         onError?.("Permiso de micrófono denegado. Habilítalo en la configuración del navegador.");
+      } else if (e.error === "network") {
+        onError?.("Sin conexión con el servidor de voz. Verificá tu conexión a internet e intentá de nuevo.");
       } else if (e.error !== "no-speech") {
-        onError?.(`Error de reconocimiento: ${e.error}`);
+        onError?.(`Error de reconocimiento: ${e.error}. Intentá de nuevo.`);
       }
       setState("idle");
     };
