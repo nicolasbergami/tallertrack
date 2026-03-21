@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { AppShell } from "../../components/layout/AppShell";
@@ -8,7 +8,23 @@ import { ACTIVE_STATUSES, STATUS_CONFIG } from "../../config/status.config";
 import { IconChevronRight } from "../../components/ui/Icons";
 
 const STALE_MS = 8 * 3600 * 1000;
-const DAYS_7   = 7 * 24 * 3600 * 1000;
+
+type Period = "7d" | "30d" | "3m" | "year";
+const PERIOD_OPTIONS: { key: Period; label: string }[] = [
+  { key: "7d",   label: "7 días"   },
+  { key: "30d",  label: "30 días"  },
+  { key: "3m",   label: "3 meses"  },
+  { key: "year", label: "Este año" },
+];
+
+function periodMs(period: Period): number | null {
+  const now = Date.now();
+  if (period === "7d")   return now - 7  * 24 * 3600 * 1000;
+  if (period === "30d")  return now - 30 * 24 * 3600 * 1000;
+  if (period === "3m")   return now - 90 * 24 * 3600 * 1000;
+  // "year": desde el 1 ene del año actual
+  return new Date(new Date().getFullYear(), 0, 1).getTime();
+}
 
 function formatCLP(amount: number): string {
   if (amount >= 1_000_000) return `$${(amount / 1_000_000).toFixed(1)}M`;
@@ -27,6 +43,7 @@ function dayName(): string {
 
 export function Taller() {
   const navigate = useNavigate();
+  const [period, setPeriod] = useState<Period>("7d");
 
   const { data, isLoading } = useQuery({
     queryKey:        ["work-orders-all"],
@@ -49,31 +66,32 @@ export function Taller() {
   }, [activeOrders]);
 
   const stats = useMemo(() => {
-    const now      = Date.now();
-    const todayStr = new Date().toDateString();
-    const since7d  = now - DAYS_7;
+    const now       = Date.now();
+    const todayStr  = new Date().toDateString();
+    const sinceMs   = periodMs(period)!;
 
     let cobradoHoy    = 0;
-    let cobradoSemana = 0;
+    let cobradoPeriodo = 0;
 
     orders.forEach(o => {
       if (o.paid_at) {
-        const t = new Date(o.paid_at).getTime();
-        if (new Date(o.paid_at).toDateString() === todayStr) cobradoHoy    += o.paid_amount ?? 0;
-        if (t >= since7d)                                    cobradoSemana += o.paid_amount ?? 0;
+        const t      = new Date(o.paid_at).getTime();
+        const amount = Number(o.paid_amount ?? 0);
+        if (new Date(o.paid_at).toDateString() === todayStr) cobradoHoy     += amount;
+        if (t >= sinceMs)                                    cobradoPeriodo += amount;
       }
     });
 
-    const pendienteCobro = activeOrders.filter(o => o.payment_status !== "paid").length;
-    const stale          = activeOrders.filter(o =>
+    const pendienteCobro  = activeOrders.filter(o => o.payment_status !== "paid").length;
+    const stale           = activeOrders.filter(o =>
       o.status !== "ready" && (now - new Date(o.received_at).getTime()) > STALE_MS,
     ).length;
-    const listos         = counts.ready         ?? 0;
-    const enReparacion   = counts.in_progress   ?? 0;
+    const listos          = counts.ready          ?? 0;
+    const enReparacion    = counts.in_progress    ?? 0;
     const esperandoPartes = counts.awaiting_parts ?? 0;
 
-    return { cobradoHoy, cobradoSemana, pendienteCobro, stale, listos, enReparacion, esperandoPartes };
-  }, [orders, activeOrders, counts]);
+    return { cobradoHoy, cobradoPeriodo, pendienteCobro, stale, listos, enReparacion, esperandoPartes };
+  }, [orders, activeOrders, counts, period]);
 
   const mechanicStats = useMemo(() => {
     const map: Record<string, number> = {};
@@ -109,6 +127,22 @@ export function Taller() {
 
         {/* ── Facturación ── */}
         <Section label="Facturación">
+          {/* Filtro de período */}
+          <div className="flex gap-2 mb-3">
+            {PERIOD_OPTIONS.map(({ key, label }) => (
+              <button
+                key={key}
+                onClick={() => setPeriod(key)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors
+                  ${period === key
+                    ? "bg-brand text-white"
+                    : "bg-surface-card border border-surface-border text-slate-400 hover:text-slate-200"
+                  }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <MetricCard
               icon="💰"
@@ -119,9 +153,9 @@ export function Taller() {
             />
             <MetricCard
               icon="📈"
-              label="Últimos 7 días"
-              value={formatCLP(stats.cobradoSemana)}
-              valueColor={stats.cobradoSemana > 0 ? "text-brand" : "text-slate-600"}
+              label={PERIOD_OPTIONS.find(p => p.key === period)!.label}
+              value={formatCLP(stats.cobradoPeriodo)}
+              valueColor={stats.cobradoPeriodo > 0 ? "text-brand" : "text-slate-600"}
               sub="acumulado"
             />
           </div>
