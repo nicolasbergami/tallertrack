@@ -3,9 +3,7 @@ import { z } from "zod";
 import { pool } from "../../config/database";
 import { createHttpError } from "../../middleware/error.middleware";
 
-// Plans that allow brand customization
-const LOGO_ALLOWED_PLANS = new Set(["professional", "enterprise"]);
-
+// Note: plan guard is enforced by requirePlan("professional") middleware in tenant.routes.ts
 const UpdateLogoSchema = z.object({
   logo_url: z
     .string()
@@ -35,32 +33,7 @@ export const tenantController = {
     try {
       const { logo_url } = UpdateLogoSchema.parse(req.body);
 
-      // ── Plan guard ─────────────────────────────────────────────────────────
-      const { rows } = await pool.query<{
-        plan: string;
-        sub_status: string;
-        trial_ends_at: string | null;
-      }>(
-        `SELECT plan, sub_status, trial_ends_at FROM tenants WHERE id = $1`,
-        [req.user.tenant_id]
-      );
-      if (!rows[0]) throw createHttpError(404, "Tenant no encontrado.");
-
-      const { plan, sub_status, trial_ends_at } = rows[0];
-
-      const isActiveTrial =
-        sub_status === "trialing" &&
-        trial_ends_at != null &&
-        new Date(trial_ends_at) > new Date();
-
-      if (!LOGO_ALLOWED_PLANS.has(plan) && !isActiveTrial) {
-        throw createHttpError(
-          403,
-          "La personalización de marca requiere el plan Taller Pro o superior."
-        );
-      }
-
-      // ── Persist ────────────────────────────────────────────────────────────
+      // Plan guard is handled upstream by requirePlan("professional") middleware
       await pool.query(
         `UPDATE tenants
             SET settings   = jsonb_set(settings, '{logo_url}', $1::jsonb, true),

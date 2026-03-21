@@ -145,13 +145,63 @@ export const FEATURE_GATES: Record<PremiumFeature, FeatureGateConfig> = {
 
 // ── Plan check helpers ──────────────────────────────────────────────────────
 
+/**
+ * Resolves the *effective* plan for access checks.
+ *
+ * Business rule: trial users get professional-level access.
+ * If sub_status === "trialing" we treat the plan as "professional"
+ * regardless of what the plan field says.
+ */
+export function effectivePlan(
+  userPlan:  SubscriptionPlan | undefined,
+  subStatus: string | undefined,
+): SubscriptionPlan {
+  if (subStatus === "trialing") return "professional";
+  return userPlan ?? "free";
+}
+
+/**
+ * Returns true when the user can access the given feature.
+ *
+ * Pass `subStatus` so that trialing users are treated as professional.
+ */
 export function isFeatureAvailable(
-  userPlan: SubscriptionPlan | undefined,
-  feature:  PremiumFeature,
+  userPlan:  SubscriptionPlan | undefined,
+  feature:   PremiumFeature,
+  subStatus?: string,
 ): boolean {
   const cfg     = FEATURE_GATES[feature];
-  const current = userPlan ?? "free";
+  const current = effectivePlan(userPlan, subStatus);
   return PLAN_RANK[current] >= PLAN_RANK[cfg.planRequired];
+}
+
+// ── useSubscription hook ────────────────────────────────────────────────────
+
+/**
+ * Central hook for subscription state.
+ * Use this everywhere instead of reading plan/sub_status directly.
+ *
+ * Business rule baked in: trialing === professional benefits.
+ */
+export function useSubscription() {
+  const plan      = useAuthStore(s => s.user?.plan);
+  const subStatus = useAuthStore(s => s.user?.sub_status);
+
+  const resolved  = effectivePlan(plan, subStatus);
+  const isTrialing = subStatus === "trialing";
+
+  return {
+    plan,
+    subStatus,
+    /** Plan after applying trial promotion ("trialing" → "professional") */
+    effectivePlan:          resolved,
+    isTrialing,
+    isProOrHigher:          PLAN_RANK[resolved] >= PLAN_RANK["professional"],
+    isEnterpriseOrHigher:   PLAN_RANK[resolved] >= PLAN_RANK["enterprise"],
+    /** Convenience: check a single feature gate */
+    canAccess: (feature: PremiumFeature) =>
+      isFeatureAvailable(plan, feature, subStatus),
+  };
 }
 
 // ── usePremiumGate hook ─────────────────────────────────────────────────────
@@ -161,21 +211,22 @@ export function isFeatureAvailable(
  *   - returns true  → user has access, proceed normally
  *   - returns false → user does NOT have access, paywall modal shown automatically
  *
+ * Trialing users are treated as professional (no paywall shown).
+ *
  * Usage:
  *   const { gate, modal } = usePremiumGate("voice_diagnosis");
  *   onClick={() => gate() && startRecording()}
- *   ...
- *   {modal}
  */
 export function usePremiumGate(feature: PremiumFeature) {
-  const plan              = useAuthStore(s => s.user?.plan);
-  const [open, setOpen]   = useState(false);
+  const plan      = useAuthStore(s => s.user?.plan);
+  const subStatus = useAuthStore(s => s.user?.sub_status);
+  const [open, setOpen] = useState(false);
 
   const gate = useCallback((): boolean => {
-    if (isFeatureAvailable(plan, feature)) return true;
+    if (isFeatureAvailable(plan, feature, subStatus)) return true;
     setOpen(true);
     return false;
-  }, [plan, feature]);
+  }, [plan, subStatus, feature]);
 
   return { gate, paywallOpen: open, setPaywallOpen: setOpen };
 }

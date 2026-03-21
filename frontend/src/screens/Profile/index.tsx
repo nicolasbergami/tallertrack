@@ -6,7 +6,7 @@ import { useAuthStore } from "../../store/auth.store";
 import { IconLogout, IconChevronRight, IconTeam } from "../../components/ui/Icons";
 import { WhatsAppSection } from "./WhatsAppSection";
 import { tenantApi } from "../../api/tenant.api";
-import { isFeatureAvailable } from "../../config/features.config";
+import { useSubscription } from "../../config/features.config";
 import { PremiumModal } from "../../components/ui/PremiumModal";
 
 const ROLE_LABELS: Record<string, string> = {
@@ -69,7 +69,7 @@ export function Profile() {
 
         {/* Brand logo — only visible to owner/admin */}
         {(user.role === "owner" || user.role === "admin") && (
-          <LogoBrandingSection userPlan={user.plan} />
+          <LogoBrandingSection />
         )}
 
         {/* Account */}
@@ -152,8 +152,9 @@ export function Profile() {
 // LogoBrandingSection
 // ---------------------------------------------------------------------------
 
-function LogoBrandingSection({ userPlan }: { userPlan?: string }) {
-  const hasAccess  = isFeatureAvailable(userPlan as any, "brand_logo");
+function LogoBrandingSection() {
+  const { canAccess } = useSubscription();
+  const hasAccess     = canAccess("brand_logo");
   const [urlInput, setUrlInput] = useState("");
   const [paywallOpen, setPaywallOpen] = useState(false);
 

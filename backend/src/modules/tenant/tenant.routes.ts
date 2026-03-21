@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { authenticate, authorize } from "../../middleware/auth.middleware";
+import { requirePlan } from "../../middleware/plan.middleware";
 import { tenantController } from "./tenant.controller";
 
 const router = Router();
@@ -13,6 +14,7 @@ router.get("/settings", tenantController.getSettings);
 router.patch(
   "/settings/logo",
   authorize("owner", "admin"),
+  requirePlan("professional"),   // trialing is treated as professional inside middleware
   tenantController.updateLogo
 );
 
