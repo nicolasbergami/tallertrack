@@ -109,8 +109,8 @@ export const backofficeService = {
         LEFT  JOIN work_orders wo ON wo.tenant_id = t.id
         WHERE t.deleted_at IS NULL
           AND ($1::text IS NULL OR t.name ILIKE $1 OR t.slug ILIKE $1)
-          AND ($2::text IS NULL OR t.plan       = $2)
-          AND ($3::text IS NULL OR t.sub_status = $3)
+          AND ($2::text IS NULL OR t.plan::text       = $2)
+          AND ($3::text IS NULL OR t.sub_status::text = $3)
         GROUP  BY t.id
         ORDER  BY t.created_at DESC
         LIMIT  $4 OFFSET $5
