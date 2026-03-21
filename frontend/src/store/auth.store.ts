@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import type { SubscriptionPlan } from "../config/features.config";
 
 interface User {
   id: string;
@@ -9,6 +10,9 @@ interface User {
   tenantId: string;
   tenantName: string;
   tenantSlug: string;
+  /** Subscription plan — populated from the login response / JWT.
+   *  Defaults to "free" when absent. */
+  plan?: SubscriptionPlan;
 }
 
 interface AuthState {

@@ -11,6 +11,8 @@ import { workOrdersApi } from "../../api/work-orders.api";
 import { getStatusConfig, formatElapsed } from "../../config/status.config";
 import { IconWrench, IconQr, IconDownload, IconPhone } from "../../components/ui/Icons";
 import { PAYMENT_METHOD_LABELS } from "../../types/work-order";
+import { PremiumModal } from "../../components/ui/PremiumModal";
+import { usePremiumGate } from "../../config/features.config";
 
 // Statuses where the floating "Presupuesto IA" header button is shown
 // (diagnosing uses the inline DiagnosisPanel instead)
@@ -44,6 +46,9 @@ export function OrderDetail() {
   const [aiModal,       setAiModal]       = useState(false);
   const [payModal,      setPayModal]      = useState(false);
   const [remitoLoading, setRemitoLoading] = useState(false);
+
+  const { gate: gateAiQuote, paywallOpen: aiPaywallOpen, setPaywallOpen: setAiPaywallOpen } =
+    usePremiumGate("ai_quote");
 
   const { data: order, isLoading, error } = useQuery({
     queryKey:        ["work-order", id],
@@ -112,7 +117,7 @@ export function OrderDetail() {
       action={
         canDictateQuote ? (
           <button
-            onClick={() => setAiModal(true)}
+            onClick={() => gateAiQuote() && setAiModal(true)}
             className="h-9 px-3 rounded-xl bg-brand/15 hover:bg-brand/25 border border-brand/30
                        text-brand font-semibold text-xs flex items-center gap-1.5 transition-colors"
           >
@@ -324,6 +329,12 @@ export function OrderDetail() {
       {payModal && (
         <PaymentModal order={order} onClose={() => setPayModal(false)} />
       )}
+
+      <PremiumModal
+        isOpen={aiPaywallOpen}
+        onClose={() => setAiPaywallOpen(false)}
+        feature="ai_quote"
+      />
 
       {aiModal && (
         <AiQuoteModal

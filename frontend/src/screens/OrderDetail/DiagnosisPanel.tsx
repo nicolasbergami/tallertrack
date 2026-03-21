@@ -12,6 +12,8 @@ import { useMutation } from "@tanstack/react-query";
 import { WorkOrderDetail } from "../../types/work-order";
 import { aiApi, VoiceDiagnosisResult, QuoteItemType, SaveQuoteItem } from "../../api/ai.api";
 import { IconX } from "../../components/ui/Icons";
+import { PremiumModal } from "../../components/ui/PremiumModal";
+import { usePremiumGate } from "../../config/features.config";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -85,6 +87,8 @@ export function DiagnosisPanel({ order, onSent }: Props) {
   const [resumen,     setResumen]     = useState("");
   const [items,       setItems]       = useState<ItemRow[]>([newItem()]);
   const [notes,       setNotes]       = useState("");
+
+  const { gate: gateVoice, paywallOpen, setPaywallOpen } = usePremiumGate("voice_diagnosis");
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef        = useRef<Blob[]>([]);
@@ -512,7 +516,7 @@ export function DiagnosisPanel({ order, onSent }: Props) {
 
               {/* Big circular mic / stop button */}
               <button
-                onClick={() => isRecording ? stopRecording() : startRecording()}
+                onClick={() => isRecording ? stopRecording() : (gateVoice() && startRecording())}
                 className={`w-24 h-24 rounded-full flex items-center justify-center border-4
                             transition-all duration-200 active:scale-95
                             ${isRecording
@@ -565,6 +569,13 @@ export function DiagnosisPanel({ order, onSent }: Props) {
           )}
         </div>
       )}
+
+      {/* ── Premium paywall ── */}
+      <PremiumModal
+        isOpen={paywallOpen}
+        onClose={() => setPaywallOpen(false)}
+        feature="voice_diagnosis"
+      />
 
       {/* ─ Manual mode ─ */}
       {method === "manual" && (
