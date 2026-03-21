@@ -26,11 +26,6 @@ import { useAuthStore } from "../../store/auth.store";
 const KANBAN_COLUMNS: WorkOrderStatus[] = ACTIVE_STATUSES;
 const STALE_MS = 8 * 3600 * 1000; // 8 hours
 
-function formatCLP(amount: number): string {
-  if (amount >= 1_000_000) return `$${(amount / 1_000_000).toFixed(1)}M`;
-  if (amount >= 1_000)     return `$${Math.round(amount / 1_000)}k`;
-  return `$${amount}`;
-}
 
 export function Dashboard() {
   const navigate    = useNavigate();
@@ -107,19 +102,11 @@ export function Dashboard() {
   }, [activeOrders]);
 
   const stats = useMemo(() => {
-    const now      = Date.now();
-    const todayStr = new Date().toDateString();
-    const billingToday = orders.reduce((sum, o) => {
-      if (o.paid_at && new Date(o.paid_at).toDateString() === todayStr) {
-        return sum + (o.paid_amount ?? 0);
-      }
-      return sum;
-    }, 0);
+    const now = Date.now();
     return {
-      active:       activeOrders.length,
-      ready:        counts.ready ?? 0,
-      billingToday,
-      stale:        activeOrders.filter(o =>
+      active: activeOrders.length,
+      ready:  counts.ready ?? 0,
+      stale:  activeOrders.filter(o =>
         o.status !== "ready" &&
         (now - new Date(o.received_at).getTime()) > STALE_MS
       ).length,
@@ -217,11 +204,13 @@ export function Dashboard() {
               onClick={() => { setActiveTab("ready"); setSearch(""); }}
             />
             <StatTile
-              label="Cobrado hoy"
-              value={formatCLP(stats.billingToday)}
-              sublabel="facturación"
-              valueColor={stats.billingToday > 0 ? "text-brand" : "text-slate-600"}
-              dotColor={stats.billingToday > 0 ? "bg-brand" : undefined}
+              label="Repuestos"
+              value={counts.awaiting_parts ?? 0}
+              sublabel="en espera"
+              valueColor={(counts.awaiting_parts ?? 0) > 0 ? "text-amber-400" : "text-slate-600"}
+              dotColor={(counts.awaiting_parts ?? 0) > 0 ? "bg-amber-400" : undefined}
+              active={activeTab === "awaiting_parts"}
+              onClick={() => { setActiveTab("awaiting_parts"); setSearch(""); }}
             />
             <StatTile
               label="Vencidas"

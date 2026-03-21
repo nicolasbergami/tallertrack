@@ -1,7 +1,7 @@
 import { ReactNode } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import {
-  IconOrders, IconPlus, IconHistory, IconUser, IconBack,
+  IconOrders, IconPlus, IconHistory, IconUser, IconBack, IconChart,
 } from "../ui/Icons";
 import { GlobalAlertBanner } from "../alerts/GlobalAlertBanner";
 
@@ -58,9 +58,10 @@ export function AppShell({ children, title, backTo, action, footer }: Props) {
 
       {/* ── Bottom Nav ── */}
       <nav className="sticky bottom-0 border-t border-surface-border bg-surface/95 backdrop-blur
-                      grid grid-cols-4 pb-safe z-40">
+                      grid grid-cols-5 pb-safe z-40">
         <NavItem to="/dashboard" Icon={IconOrders}  label="Órdenes"  />
         <NavItem to="/new"       Icon={IconPlus}    label="Nueva"    highlight />
+        <NavItem to="/taller"    Icon={IconChart}   label="Taller"   />
         <NavItem to="/history"   Icon={IconHistory} label="Historial" />
         <NavItem to="/profile"   Icon={IconUser}    label="Perfil"   />
       </nav>

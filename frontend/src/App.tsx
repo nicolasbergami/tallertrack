@@ -11,6 +11,7 @@ import { Profile }        from "./screens/Profile";
 import { Billing }        from "./screens/Billing";
 import { Team }           from "./screens/Team";
 import { History }        from "./screens/History";
+import { Taller }         from "./screens/Taller";
 import { Register }       from "./screens/Register";
 import { VerifyOtp }      from "./screens/Register/VerifyOtp";
 import { Landing }        from "./screens/Landing";
@@ -101,6 +102,7 @@ export default function App() {
             <Route path="/dashboard"  element={<ProtectedRoute><Dashboard  /></ProtectedRoute>} />
             <Route path="/new"        element={<ProtectedRoute><NewOrder   /></ProtectedRoute>} />
             <Route path="/orders/:id" element={<ProtectedRoute><OrderDetail /></ProtectedRoute>} />
+            <Route path="/taller"     element={<ProtectedRoute><Taller     /></ProtectedRoute>} />
             <Route path="/history"    element={<ProtectedRoute><History    /></ProtectedRoute>} />
             <Route path="/profile"    element={<ProtectedRoute><Profile    /></ProtectedRoute>} />
             <Route path="/billing"    element={<ProtectedRoute><Billing    /></ProtectedRoute>} />

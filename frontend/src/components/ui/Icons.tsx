@@ -125,6 +125,12 @@ export const IconTeam       = ({ className = "w-5 h-5" }: IconProps) => (
   </svg>
 );
 
+export const IconChart      = ({ className = "w-5 h-5" }: IconProps) => (
+  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+  </svg>
+);
+
 export const IconCar        = ({ className = "w-5 h-5" }: IconProps) => (
   <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
     <path strokeLinecap="round" strokeLinejoin="round" d="M8 17H5a2 2 0 01-2-2V9a4 4 0 014-4h10a4 4 0 014 4v6a2 2 0 01-2 2h-3m-8 0h8m-8 0a2 2 0 104 0m4 0a2 2 0 104 0" />
