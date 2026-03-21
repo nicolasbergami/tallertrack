@@ -1,4 +1,5 @@
-import { Component, ReactNode } from "react";
+import { Component, ReactNode, useState } from "react";
+import { SplashScreen } from "./components/SplashScreen";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Dashboard }      from "./screens/Dashboard";
@@ -72,8 +73,18 @@ function SmartRoot() {
 // ── App ───────────────────────────────────────────────────────────────────────
 
 export default function App() {
+  const [splashDone, setSplashDone] = useState(
+    () => sessionStorage.getItem("splashShown") === "1",
+  );
+
+  function handleSplashDone() {
+    sessionStorage.setItem("splashShown", "1");
+    setSplashDone(true);
+  }
+
   return (
     <ErrorBoundary>
+      {!splashDone && <SplashScreen onDone={handleSplashDone} />}
       <QueryClientProvider client={queryClient}>
         <BrowserRouter>
           <Routes>

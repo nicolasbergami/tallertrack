@@ -26,6 +26,7 @@ export function Login() {
   const [error,    setError]    = useState<string | null>(null);
   const [loading,  setLoading]  = useState(false);
   const [showPass, setShowPass] = useState(false);
+  const [success,  setSuccess]  = useState(false);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -42,16 +43,43 @@ export function Login() {
         tenantName: user.tenant_name,
         tenantSlug: user.tenant_slug ?? "",
       });
-      navigate("/dashboard", { replace: true });
+      // Brief success animation before navigating
+      setSuccess(true);
+      sessionStorage.removeItem("splashShown"); // reset splash for next session
+      setTimeout(() => navigate("/dashboard", { replace: true }), 600);
     } catch (err) {
       setError((err as Error).message);
-    } finally {
       setLoading(false);
     }
   }
 
   return (
     <div className="min-h-screen bg-surface flex flex-col items-center justify-center px-4">
+
+      {/* Login success overlay */}
+      {success && (
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 9999,
+          background: "#0F172A",
+          display: "flex", flexDirection: "column",
+          alignItems: "center", justifyContent: "center",
+          animation: "loginFadeIn 0.4s ease forwards",
+        }}>
+          <img src="/logo.png" alt="TallerTrack" style={{
+            height: 120, width: "auto",
+            animation: "splashLogo 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards",
+          }} />
+          <style>{`
+            @keyframes loginFadeIn {
+              from { opacity: 0; } to { opacity: 1; }
+            }
+            @keyframes splashLogo {
+              from { opacity: 0; transform: scale(0.8); }
+              to   { opacity: 1; transform: scale(1);   }
+            }
+          `}</style>
+        </div>
+      )}
 
       {/* Logo */}
       <div className="mb-8 text-center">
