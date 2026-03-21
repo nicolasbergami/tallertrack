@@ -5,15 +5,72 @@ import { AppShell } from "../../components/layout/AppShell";
 import { api } from "../../api/client";
 
 // ---------------------------------------------------------------------------
+// Static plan definitions — IDs must match backend plan keys
+// ---------------------------------------------------------------------------
+
+const PLAN_RANK: Record<string, number> = {
+  starter:      0,
+  professional: 1,
+  enterprise:   2,
+};
+
+interface PlanDef {
+  id:       string;
+  name:     string;
+  price:    number;
+  limit:    string;
+  badge?:   string;
+  features: string[];
+  tier:     "standard" | "popular" | "premium";
+}
+
+const PLANS: PlanDef[] = [
+  {
+    id:    "starter",
+    name:  "Mecánico Independiente",
+    price: 18_000,
+    limit: "Hasta 10 vehículos en simultáneo",
+    tier:  "standard",
+    features: [
+      "1 Usuario",
+      "Diagnóstico con IA por voz",
+      "WhatsApp automático (cambios de estado)",
+      "Seguimiento QR para clientes",
+    ],
+  },
+  {
+    id:    "professional",
+    name:  "Taller Pro",
+    price: 35_000,
+    limit: "Hasta 30 vehículos en simultáneo",
+    badge: "MÁS POPULAR",
+    tier:  "popular",
+    features: [
+      "Todo lo anterior, más:",
+      "Hasta 3 Usuarios",
+      "Presupuesto Digital Interactivo",
+      "Recordatorios Automáticos de Service",
+    ],
+  },
+  {
+    id:    "enterprise",
+    name:  "Taller Platinum",
+    price: 80_000,
+    limit: "Vehículos ilimitados",
+    tier:  "premium",
+    features: [
+      "Todo lo anterior, más:",
+      "Usuarios ilimitados",
+      "Múltiples sucursales",
+      "Dashboard de métricas y finanzas",
+      "Soporte técnico prioritario",
+    ],
+  },
+];
+
+// ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-interface PlanConfig {
-  id:          string;
-  displayName: string;
-  price:       number;
-  currency:    string;
-  features:    string[];
-}
 
 interface BillingStatus {
   sub_status:             string;
@@ -25,19 +82,71 @@ interface BillingStatus {
 }
 
 // ---------------------------------------------------------------------------
-// Sub-components
+// Trial Banner
 // ---------------------------------------------------------------------------
+
+function TrialBanner({ days_remaining }: { days_remaining: number | null }) {
+  const days      = days_remaining ?? 0;
+  const isExpired = days <= 0;
+
+  return (
+    <div
+      className="relative overflow-hidden rounded-2xl border border-orange-500/40 px-5 py-4"
+      style={{
+        background:
+          "linear-gradient(135deg, rgba(194,65,12,0.20) 0%, rgba(120,53,15,0.10) 100%)",
+      }}
+    >
+      {/* Ambient glows */}
+      <div className="absolute -top-8 -right-8 w-44 h-44 rounded-full bg-orange-500/10 blur-3xl pointer-events-none" />
+      <div className="absolute bottom-0 -left-4 w-28 h-28 rounded-full bg-amber-500/10 blur-2xl pointer-events-none" />
+
+      <div className="relative flex items-start gap-3">
+        <span className="text-[26px] leading-none mt-0.5 flex-shrink-0">🎁</span>
+        <div>
+          <p className="text-orange-200 font-black text-sm leading-snug">
+            Estás disfrutando 14 días de prueba con los beneficios del plan Taller Pro
+          </p>
+          {isExpired ? (
+            <p className="text-orange-400/70 text-xs mt-1.5">
+              Tu período de prueba expiró. Elegí un plan para reactivar tu cuenta.
+            </p>
+          ) : (
+            <p className="text-orange-300/70 text-xs mt-1.5">
+              Te quedan{" "}
+              <span className="font-bold text-orange-300">
+                {days} {days === 1 ? "día" : "días"}
+              </span>
+              . Elegí tu plan antes de que venza.
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Status Banner (active / inactive)
+// ---------------------------------------------------------------------------
+
 function StatusBanner({ status }: { status: BillingStatus }) {
-  const { sub_status, days_remaining, trial_ends_at, sub_current_period_end } = status;
+  const { sub_status, days_remaining, sub_current_period_end } = status;
+
+  if (sub_status === "trialing") {
+    return <TrialBanner days_remaining={days_remaining} />;
+  }
 
   if (sub_status === "active") {
     const endDate = sub_current_period_end
-      ? new Date(sub_current_period_end).toLocaleDateString("es-AR", { day: "numeric", month: "long", year: "numeric" })
+      ? new Date(sub_current_period_end).toLocaleDateString("es-AR", {
+          day: "numeric", month: "long", year: "numeric",
+        })
       : null;
     return (
       <div className="bg-green-900/30 border border-green-700/40 rounded-2xl px-5 py-4">
-        <div className="flex items-center gap-2 mb-1">
-          <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+        <div className="flex items-center gap-2 mb-0.5">
+          <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse flex-shrink-0" />
           <span className="text-green-400 font-semibold text-sm">Suscripción activa</span>
         </div>
         {endDate && (
@@ -47,100 +156,187 @@ function StatusBanner({ status }: { status: BillingStatus }) {
     );
   }
 
-  if (sub_status === "trialing") {
-    const isExpired = !days_remaining || days_remaining <= 0;
-    const trialEnd  = trial_ends_at
-      ? new Date(trial_ends_at).toLocaleDateString("es-AR", { day: "numeric", month: "long" })
-      : null;
-
-    return (
-      <div className={`rounded-2xl px-5 py-4 border ${isExpired
-        ? "bg-red-900/30 border-red-700/40"
-        : "bg-yellow-900/20 border-yellow-700/40"
-      }`}>
-        <div className="flex items-center gap-2 mb-1">
-          <span className={`w-2 h-2 rounded-full ${isExpired ? "bg-red-400" : "bg-yellow-400"}`} />
-          <span className={`font-semibold text-sm ${isExpired ? "text-red-400" : "text-yellow-400"}`}>
-            {isExpired ? "Período de prueba expirado" : `Prueba gratuita — ${days_remaining} días restantes`}
-          </span>
-        </div>
-        {!isExpired && trialEnd && (
-          <p className="text-slate-400 text-xs">Tu prueba vence el {trialEnd}. Suscribite para no perder acceso.</p>
-        )}
-        {isExpired && (
-          <p className="text-slate-400 text-xs">Elegí un plan para reactivar tu cuenta.</p>
-        )}
-      </div>
-    );
-  }
-
   return (
     <div className="bg-red-900/30 border border-red-700/40 rounded-2xl px-5 py-4">
       <p className="text-red-400 font-semibold text-sm">Suscripción inactiva</p>
-      <p className="text-slate-400 text-xs mt-1">Elegí un plan para continuar usando TallerTrack.</p>
+      <p className="text-slate-400 text-xs mt-1">
+        Elegí un plan para continuar usando TallerTrack.
+      </p>
     </div>
   );
 }
 
+// ---------------------------------------------------------------------------
+// PlanCard
+// ---------------------------------------------------------------------------
+
 function PlanCard({
   plan,
-  current,
+  currentPlan,
+  subStatus,
   onSubscribe,
   loading,
 }: {
-  plan:        PlanConfig;
-  current:     string;
+  plan:        PlanDef;
+  currentPlan: string;
+  subStatus:   string;
   onSubscribe: (planId: string) => void;
   loading:     boolean;
 }) {
-  const isCurrent = current === plan.id;
-  const isPopular = plan.id === "professional";
+  const isTrialing    = subStatus === "trialing";
+  const isCurrent     = currentPlan === plan.id && !isTrialing;
+  const currentRank   = PLAN_RANK[currentPlan] ?? -1;
+  const thisPlanRank  = PLAN_RANK[plan.id]     ??  0;
+  const isUpgrade     = !isTrialing && !isCurrent && thisPlanRank > currentRank;
+
+  const { tier } = plan;
+
+  // ── Button label ──────────────────────────────────────────────────────────
+  let btnLabel: string;
+  if (loading)         btnLabel = "Procesando…";
+  else if (isCurrent)  btnLabel = "Plan Actual";
+  else if (isTrialing) btnLabel = "Elegir este plan";
+  else if (isUpgrade)  btnLabel = "Mejorar Plan";
+  else                 btnLabel = "Cambiar Plan";
+
+  // ── Card styles ───────────────────────────────────────────────────────────
+  const cardBase = "relative flex flex-col rounded-2xl p-5 gap-4 border transition-all";
+
+  const cardStyle =
+    tier === "popular"
+      ? `${cardBase} border-orange-500/55 shadow-xl shadow-orange-900/25
+         sm:scale-[1.04] sm:z-10`
+      : tier === "premium"
+      ? `${cardBase} border-violet-700/45 bg-violet-950/10`
+      : `${cardBase} border-slate-700/60 bg-surface-card`;
+
+  const popularBg = {
+    background:
+      "linear-gradient(160deg, rgba(124,45,18,0.28) 0%, rgba(69,26,3,0.18) 100%)",
+  };
+
+  // ── Checkmark color ───────────────────────────────────────────────────────
+  const checkColor =
+    tier === "popular"
+      ? "text-orange-400"
+      : tier === "premium"
+      ? "text-violet-400"
+      : "text-green-400";
+
+  // ── Limit badge ───────────────────────────────────────────────────────────
+  const limitBadge =
+    tier === "popular"
+      ? "bg-orange-500/15 text-orange-300 border border-orange-500/30"
+      : tier === "premium"
+      ? "bg-violet-500/10 text-violet-300 border border-violet-500/25"
+      : "bg-slate-700/60 text-slate-400 border border-slate-600/50";
+
+  // ── CTA button ────────────────────────────────────────────────────────────
+  let btnClass: string;
+  if (isCurrent) {
+    btnClass = "border border-slate-700 text-slate-500 cursor-default";
+  } else if (tier === "popular") {
+    btnClass =
+      "bg-gradient-to-r from-orange-600 to-amber-500 hover:from-orange-500 hover:to-amber-400 text-white font-bold shadow-md shadow-orange-900/40 active:scale-[0.98]";
+  } else if (tier === "premium") {
+    btnClass =
+      "border border-violet-600/50 text-violet-300 hover:bg-violet-900/30 active:scale-[0.98]";
+  } else {
+    btnClass = "bg-slate-700 hover:bg-slate-600 text-slate-100 active:scale-[0.98]";
+  }
 
   return (
-    <div className={`relative flex flex-col rounded-2xl border p-5 gap-4 ${
-      isPopular
-        ? "border-blue-500/60 bg-blue-900/10"
-        : "border-surface-border bg-surface-card"
-    }`}>
-      {isPopular && (
-        <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-blue-600 text-white text-[11px] font-bold px-3 py-1 rounded-full">
-          MÁS POPULAR
+    <div className={cardStyle} style={tier === "popular" ? popularBg : undefined}>
+
+      {/* Popular badge */}
+      {plan.badge && (
+        <span
+          className="absolute -top-3.5 left-1/2 -translate-x-1/2
+                     text-white text-[10px] font-black uppercase tracking-[0.12em]
+                     px-4 py-1 rounded-full shadow-lg shadow-orange-900/50 whitespace-nowrap"
+          style={{
+            background: "linear-gradient(90deg, #C2410C 0%, #F97316 50%, #FB923C 100%)",
+          }}
+        >
+          ✦ {plan.badge}
         </span>
       )}
 
-      <div>
-        <p className="text-white font-bold text-lg">{plan.displayName}</p>
-        <div className="flex items-baseline gap-1 mt-1">
-          <span className="text-2xl font-black text-white">
+      {/* Name + price */}
+      <div className={plan.badge ? "mt-2" : ""}>
+        <p
+          className={`font-black text-base leading-tight ${
+            tier === "popular" ? "text-orange-100" : "text-white"
+          }`}
+        >
+          {plan.name}
+        </p>
+        <div className="flex items-baseline gap-1 mt-1.5">
+          <span
+            className={`text-[2rem] font-black tabular-nums leading-none ${
+              tier === "popular" ? "text-orange-100" : "text-white"
+            }`}
+          >
             ${plan.price.toLocaleString("es-AR")}
           </span>
           <span className="text-slate-400 text-sm">/mes</span>
         </div>
       </div>
 
-      <ul className="space-y-2 flex-1">
-        {plan.features.map((f) => (
-          <li key={f} className="flex items-center gap-2 text-sm text-slate-300">
-            <svg className="w-4 h-4 text-green-400 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-            </svg>
-            {f}
-          </li>
-        ))}
+      {/* Vehicle limit badge */}
+      <div
+        className={`inline-flex items-center gap-1.5 self-start
+                    px-2.5 py-1.5 rounded-xl text-[11px] font-semibold
+                    ${limitBadge}`}
+      >
+        {/* Car icon */}
+        <svg
+          className="w-3.5 h-3.5 flex-shrink-0"
+          fill="none" viewBox="0 0 24 24"
+          stroke="currentColor" strokeWidth={1.75}
+        >
+          <path
+            strokeLinecap="round" strokeLinejoin="round"
+            d="M8.25 18.75a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 01-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 00-3.213-9.193 2.056 2.056 0 00-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.958c0-.568-.422-1.048-.987-1.106a48.554 48.554 0 00-10.026 0 1.106 1.106 0 00-.987 1.106v7.635m12-6.677v6.677m0 4.5v-4.5m0 0h-12"
+          />
+        </svg>
+        {plan.limit}
+      </div>
+
+      {/* Features */}
+      <ul className="flex flex-col gap-2 flex-1">
+        {plan.features.map((f, i) => {
+          if (f.startsWith("Todo lo anterior")) {
+            return (
+              <li key={i} className="text-[10px] font-bold text-slate-500 uppercase tracking-wider pt-0.5 pb-0.5">
+                {f}
+              </li>
+            );
+          }
+          return (
+            <li key={i} className="flex items-start gap-2 text-sm text-slate-300">
+              <svg
+                className={`w-4 h-4 flex-shrink-0 mt-0.5 ${checkColor}`}
+                fill="none" viewBox="0 0 24 24"
+                stroke="currentColor" strokeWidth={2.5}
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+              {f}
+            </li>
+          );
+        })}
       </ul>
 
+      {/* CTA */}
       <button
-        onClick={() => onSubscribe(plan.id)}
-        disabled={loading || isCurrent}
-        className={`w-full h-11 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-          isCurrent
-            ? "border border-slate-600 text-slate-400"
-            : isPopular
-            ? "bg-blue-600 hover:bg-blue-500 text-white"
-            : "bg-slate-700 hover:bg-slate-600 text-white"
-        }`}
+        onClick={() => { if (!isCurrent && !loading) onSubscribe(plan.id); }}
+        disabled={isCurrent || loading}
+        className={`w-full h-12 rounded-xl text-sm transition-all
+                    disabled:opacity-50 disabled:cursor-not-allowed
+                    ${btnClass}`}
       >
-        {isCurrent ? "Plan actual" : loading ? "Procesando…" : "Suscribirme"}
+        {btnLabel}
       </button>
     </div>
   );
@@ -149,23 +345,18 @@ function PlanCard({
 // ---------------------------------------------------------------------------
 // Main screen
 // ---------------------------------------------------------------------------
+
 export function Billing() {
-  const [searchParams]  = useSearchParams();
-  const queryClient     = useQueryClient();
+  const [searchParams] = useSearchParams();
+  const queryClient    = useQueryClient();
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
 
   const justPaid = searchParams.get("success") === "1";
 
   const { data: status, isLoading: statusLoading } = useQuery<BillingStatus>({
-    queryKey: ["billing-status"],
-    queryFn:  () => api.get<BillingStatus>("/billing/status"),
-    refetchInterval: justPaid ? 3000 : false,  // poll after redirect from MP
-  });
-
-  const { data: plans, isLoading: plansLoading } = useQuery<PlanConfig[]>({
-    queryKey: ["billing-plans"],
-    queryFn:  () => api.get<PlanConfig[]>("/billing/plans"),
-    staleTime: Infinity,
+    queryKey:        ["billing-status"],
+    queryFn:         () => api.get<BillingStatus>("/billing/status"),
+    refetchInterval: justPaid ? 3_000 : false,
   });
 
   const subscribeMutation = useMutation({
@@ -173,7 +364,6 @@ export function Billing() {
       api.post<{ init_point: string }>("/billing/subscribe", { plan }),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["billing-status"] });
-      // Redirect to Mercado Pago checkout
       window.location.href = data.init_point;
     },
     onError: (err: Error) => {
@@ -187,11 +377,14 @@ export function Billing() {
     subscribeMutation.mutate(planId);
   }
 
+  const currentPlan = status?.plan       ?? "free";
+  const subStatus   = status?.sub_status ?? "inactive";
+
   return (
     <AppShell title="Suscripción">
       <div className="flex flex-col gap-5 p-4 animate-slide-up">
 
-        {/* Success banner after MP redirect */}
+        {/* Payment success banner (after MP redirect) */}
         {justPaid && (
           <div className="bg-green-900/30 border border-green-700/40 rounded-2xl px-5 py-4 text-center">
             <p className="text-green-400 font-bold text-sm">¡Pago recibido!</p>
@@ -201,32 +394,39 @@ export function Billing() {
           </div>
         )}
 
-        {/* Current status */}
+        {/* Status / Trial banner */}
         {statusLoading ? (
-          <div className="h-16 bg-slate-800 rounded-2xl animate-pulse" />
+          <div className="h-20 bg-slate-800/60 rounded-2xl animate-pulse" />
         ) : status ? (
           <StatusBanner status={status} />
         ) : null}
 
         {/* Plan grid */}
         <section>
-          <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider px-1 mb-3">
-            Planes disponibles
-          </p>
+          <div className="px-1 mb-4">
+            <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1">
+              Planes disponibles
+            </p>
+            <p className="text-slate-500 text-xs">
+              Sin contratos. Cancelá cuando quieras.
+            </p>
+          </div>
 
-          {plansLoading ? (
-            <div className="grid grid-cols-1 gap-3">
+          {statusLoading ? (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:py-4">
               {[1, 2, 3].map((n) => (
-                <div key={n} className="h-56 bg-slate-800 rounded-2xl animate-pulse" />
+                <div key={n} className="h-80 bg-slate-800/60 rounded-2xl animate-pulse" />
               ))}
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-3">
-              {(plans ?? []).map((plan) => (
+            /* sm:py-4 gives room for the popular card's scale-[1.04] overflow */
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:items-start sm:py-4">
+              {PLANS.map((plan) => (
                 <PlanCard
                   key={plan.id}
                   plan={plan}
-                  current={status?.plan ?? "free"}
+                  currentPlan={currentPlan}
+                  subStatus={subStatus}
                   onSubscribe={handleSubscribe}
                   loading={loadingPlan === plan.id}
                 />
@@ -235,10 +435,12 @@ export function Billing() {
           )}
         </section>
 
-        <p className="text-center text-[11px] text-slate-600 pb-2">
+        <p className="text-center text-[11px] text-slate-600 pb-4">
           Los cobros se realizan mensualmente a través de Mercado Pago.
+          <br />
           Podés cancelar cuando quieras desde el panel de MP.
         </p>
+
       </div>
     </AppShell>
   );
