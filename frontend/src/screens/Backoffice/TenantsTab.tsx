@@ -494,7 +494,7 @@ export function TenantsTab() {
     setPage(1);
   }
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: ["backoffice-tenants", page, search, plan, status],
     queryFn:  () => backofficeApi.getTenants({ page, limit: 20, search, plan, status }),
   });
@@ -601,7 +601,17 @@ export function TenantsTab() {
             </tr>
           </thead>
           <tbody>
-            {isLoading   ? <TableSkeleton /> :
+            {isLoading ? <TableSkeleton /> :
+             isError   ? (
+               <tr><td colSpan={7}>
+                 <div className="flex flex-col items-center justify-center py-12 gap-3">
+                   <p className="text-red-400 font-semibold text-sm">Error al cargar los talleres</p>
+                   <p className="text-slate-600 text-xs font-mono max-w-md text-center break-all">
+                     {(error as Error)?.message ?? "Error desconocido"}
+                   </p>
+                 </div>
+               </td></tr>
+             ) :
              data?.tenants.length === 0 ? <EmptyState hasFilters={hasFilters} /> :
              data?.tenants.map((t) => (
                <TenantRow key={t.id} tenant={t} onModal={openModal} onImpersonate={handleImpersonate} />
