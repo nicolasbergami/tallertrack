@@ -60,19 +60,27 @@ export const authService = {
       [user.id]
     ).catch(() => {});
 
-    // 7. Resolve is_system_admin — separate query with tenant context (satisfies RLS).
-    //    Wrapped in try/catch so login still works before migration 006 runs.
-    let isSystemAdmin = false;
-    try {
-      await withTenantContext(tenant.id, async (client) => {
-        const { rows: adminRows } = await client.query<{ is_system_admin: boolean }>(
-          `SELECT is_system_admin FROM users WHERE id = $1`,
-          [user.id]
-        );
-        isSystemAdmin = adminRows[0]?.is_system_admin ?? false;
-      });
-    } catch {
-      // Column not yet migrated — safe to ignore, falls back to SUPERADMIN_EMAILS check
+    // 7. Resolve is_system_admin
+    //    Priority: SUPERADMIN_EMAILS env var → DB column (if migration already ran)
+    const superadminEmails = env.SUPERADMIN_EMAILS
+      ? env.SUPERADMIN_EMAILS.split(",").map((e) => e.trim().toLowerCase()).filter(Boolean)
+      : [];
+
+    let isSystemAdmin = superadminEmails.includes(email.toLowerCase());
+
+    if (!isSystemAdmin) {
+      // DB fallback — wrapped in try/catch so login works before migration 006 runs
+      try {
+        await withTenantContext(tenant.id, async (client) => {
+          const { rows: adminRows } = await client.query<{ is_system_admin: boolean }>(
+            `SELECT is_system_admin FROM users WHERE id = $1`,
+            [user.id]
+          );
+          isSystemAdmin = adminRows[0]?.is_system_admin ?? false;
+        });
+      } catch {
+        // Column not yet migrated — SUPERADMIN_EMAILS already checked above
+      }
     }
 
     // 8. Sign JWT
