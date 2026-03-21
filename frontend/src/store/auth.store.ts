@@ -15,6 +15,8 @@ interface User {
   plan?: SubscriptionPlan;
   /** Subscription status — "trialing" | "active" | "inactive" | etc. */
   sub_status?: string;
+  /** TallerTrack SaaS owner flag — grants access to /backoffice panel. */
+  is_system_admin?: boolean;
 }
 
 interface AuthState {

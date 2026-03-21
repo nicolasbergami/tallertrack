@@ -122,6 +122,36 @@ export function Profile() {
           </Link>
         </section>
 
+        {/* SuperAdmin Backoffice — only visible to system admins */}
+        {user.is_system_admin && (
+          <section>
+            <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider px-1 mb-2">
+              Sistema
+            </p>
+            <Link to="/backoffice"
+              className="flex items-center justify-between gap-3 w-full p-4
+                         rounded-2xl border group active:scale-[0.99] transition-all"
+              style={{
+                background: "rgba(244,63,94,0.06)",
+                borderColor: "rgba(244,63,94,0.25)",
+              }}
+            >
+              <div className="flex items-center gap-3">
+                <span className="text-xl">📊</span>
+                <div>
+                  <p className="font-semibold text-sm text-rose-200">Panel de Administración</p>
+                  <p className="text-[11px] text-rose-400/60">Métricas globales · Tenants · Actividad</p>
+                </div>
+              </div>
+              <span className="text-[9px] font-black uppercase tracking-[0.15em] px-2 py-1
+                               rounded-full text-rose-300 border border-rose-500/30"
+                    style={{ background: "rgba(244,63,94,0.10)" }}>
+                SUPERADMIN
+              </span>
+            </Link>
+          </section>
+        )}
+
         {/* WhatsApp connection */}
         <WhatsAppSection />
 

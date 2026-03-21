@@ -14,8 +14,9 @@ export const authService = {
     const email = dto.email.toLowerCase().trim();
 
     // 1. Buscar usuario por email globalmente (emails son únicos en toda la plataforma)
-    const userResult = await pool.query<AuthUser & { tenant_id: string }>(
-      `SELECT u.id, u.email, u.full_name, u.role, u.status, u.password_hash, u.tenant_id
+    const userResult = await pool.query<AuthUser & { tenant_id: string; is_system_admin: boolean }>(
+      `SELECT u.id, u.email, u.full_name, u.role, u.status, u.password_hash, u.tenant_id,
+              u.is_system_admin
          FROM users u
         WHERE u.email = $1
           AND u.deleted_at IS NULL
@@ -62,10 +63,11 @@ export const authService = {
 
     // 7. Sign JWT
     const payload: Omit<JwtPayload, "iat" | "exp"> = {
-      sub:       user.id,
-      tenant_id: tenant.id,
-      role:      user.role,
-      email:     user.email,
+      sub:              user.id,
+      tenant_id:        tenant.id,
+      role:             user.role,
+      email:            user.email,
+      is_system_admin:  user.is_system_admin ?? false,
     };
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -77,13 +79,16 @@ export const authService = {
       token,
       expires_in: env.JWT_EXPIRES_IN,
       user: {
-        id:          user.id,
-        email:       user.email,
-        full_name:   user.full_name,
-        role:        user.role,
-        tenant_id:   tenant.id,
-        tenant_name: tenant.name,
-        tenant_slug: tenant.slug,
+        id:               user.id,
+        email:            user.email,
+        full_name:        user.full_name,
+        role:             user.role,
+        tenant_id:        tenant.id,
+        tenant_name:      tenant.name,
+        tenant_slug:      tenant.slug,
+        plan:             tenant.plan,
+        sub_status:       tenant.sub_status,
+        is_system_admin:  user.is_system_admin ?? false,
       },
     };
   },

@@ -36,5 +36,8 @@ export interface LoginResponse {
     tenant_id: string;
     tenant_name: string;
     tenant_slug: string;
+    plan: string;
+    sub_status: string;
+    is_system_admin: boolean;
   };
 }

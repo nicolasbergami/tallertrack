@@ -1,6 +1,39 @@
 import { Pool, PoolClient } from "pg";
 import { env } from "./env";
 
+// ---------------------------------------------------------------------------
+// Admin pool — connects as a BYPASSRLS role (tallertrack_migrator in prod).
+// Used exclusively for cross-tenant backoffice queries.
+// Set ADMIN_DATABASE_URL to the tallertrack_migrator credentials in production.
+// Falls back to DATABASE_URL for development (works if connected user is postgres
+// superuser or has BYPASSRLS).
+// ---------------------------------------------------------------------------
+export const adminPool = new Pool({
+  connectionString: env.ADMIN_DATABASE_URL ?? env.DATABASE_URL,
+  max: 5,
+  idleTimeoutMillis: 30_000,
+  connectionTimeoutMillis: 5_000,
+});
+
+adminPool.on("error", (err) => {
+  console.error("Unexpected admin DB pool error:", err);
+});
+
+/**
+ * Executes a callback with an admin-level database connection (BYPASSRLS).
+ * Use ONLY for backoffice / super-admin operations that need to see all tenants.
+ */
+export async function withAdminContext<T>(
+  callback: (client: PoolClient) => Promise<T>
+): Promise<T> {
+  const client = await adminPool.connect();
+  try {
+    return await callback(client);
+  } finally {
+    client.release();
+  }
+}
+
 export const pool = new Pool({
   connectionString: env.DATABASE_URL,
   max: 20,

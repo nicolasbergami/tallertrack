@@ -28,6 +28,15 @@ const envSchema = z.object({
   // Billing — Mercado Pago
   MP_ACCESS_TOKEN:   z.string().optional().default(""),
   MP_WEBHOOK_SECRET: z.string().optional().default(""),
+
+  // Backoffice / SuperAdmin
+  // SUPERADMIN_EMAILS: comma-separated emails that bypass DB flag check.
+  //   e.g. SUPERADMIN_EMAILS="admin@tallertrack.com,dev@tallertrack.com"
+  SUPERADMIN_EMAILS: z.string().optional().default(""),
+  // ADMIN_DATABASE_URL: connection string for a BYPASSRLS role (tallertrack_migrator).
+  //   Defaults to DATABASE_URL. Works in dev when using the postgres superuser.
+  //   In production, set this to the tallertrack_migrator credentials.
+  ADMIN_DATABASE_URL: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);

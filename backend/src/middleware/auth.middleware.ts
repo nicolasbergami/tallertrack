@@ -7,6 +7,7 @@ export interface JwtPayload {
   tenant_id: string;  // tenant UUID — injected into RLS session variable
   role: string;
   email: string;
+  is_system_admin?: boolean;
   iat: number;
   exp: number;
 }

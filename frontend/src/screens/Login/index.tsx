@@ -13,7 +13,12 @@ async function loginRequest(email: string, password: string) {
   if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
   return body as {
     token: string;
-    user: { id: string; full_name: string; email: string; role: "owner" | "admin" | "mechanic" | "receptionist"; tenant_id: string; tenant_name: string; tenant_slug: string };
+    user: {
+      id: string; full_name: string; email: string;
+      role: "owner" | "admin" | "mechanic" | "receptionist";
+      tenant_id: string; tenant_name: string; tenant_slug: string;
+      plan?: string; sub_status?: string; is_system_admin?: boolean;
+    };
   };
 }
 
@@ -35,13 +40,16 @@ export function Login() {
     try {
       const { token, user } = await loginRequest(email.trim(), password);
       setAuth(token, {
-        id:         user.id,
-        name:       user.full_name,
-        email:      user.email,
-        role:       user.role,
-        tenantId:   user.tenant_id,
-        tenantName: user.tenant_name,
-        tenantSlug: user.tenant_slug ?? "",
+        id:              user.id,
+        name:            user.full_name,
+        email:           user.email,
+        role:            user.role,
+        tenantId:        user.tenant_id,
+        tenantName:      user.tenant_name,
+        tenantSlug:      user.tenant_slug ?? "",
+        plan:            (user.plan as never) ?? undefined,
+        sub_status:      user.sub_status,
+        is_system_admin: user.is_system_admin ?? false,
       });
       // Brief success animation before navigating
       setSuccess(true);

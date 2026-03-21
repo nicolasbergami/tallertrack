@@ -15,8 +15,10 @@ import { Taller }         from "./screens/Taller";
 import { Register }       from "./screens/Register";
 import { VerifyOtp }      from "./screens/Register/VerifyOtp";
 import { Landing }        from "./screens/Landing";
-import { ProtectedRoute } from "./components/ProtectedRoute";
-import { useAuthStore }   from "./store/auth.store";
+import { ProtectedRoute }   from "./components/ProtectedRoute";
+import { SuperAdminRoute }  from "./components/SuperAdminRoute";
+import { Backoffice }       from "./screens/Backoffice";
+import { useAuthStore }     from "./store/auth.store";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -107,6 +109,9 @@ export default function App() {
             <Route path="/profile"    element={<ProtectedRoute><Profile    /></ProtectedRoute>} />
             <Route path="/billing"    element={<ProtectedRoute><Billing    /></ProtectedRoute>} />
             <Route path="/team"       element={<ProtectedRoute><Team       /></ProtectedRoute>} />
+
+            {/* SuperAdmin — redirects to /dashboard if not is_system_admin */}
+            <Route path="/backoffice" element={<SuperAdminRoute><Backoffice /></SuperAdminRoute>} />
 
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

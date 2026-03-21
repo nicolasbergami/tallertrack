@@ -17,6 +17,7 @@ import vehicleRoutes    from "./modules/vehicles/vehicle.routes";
 import billingRoutes    from "./modules/billing/billing.routes";
 import teamRoutes       from "./modules/team/team.routes";
 import tenantRoutes     from "./modules/tenant/tenant.routes";
+import backofficeRoutes from "./modules/backoffice/backoffice.routes";
 import { sessionManager } from "./integrations/whatsapp-direct/session-manager";
 import { env } from "./config/env";
 
@@ -71,6 +72,7 @@ app.use("/api/v1/work-orders", authenticate, requireActiveSubscription, workOrde
 app.use("/api/v1/ai",          authenticate, requireActiveSubscription, aiRoutes);
 
 app.use("/api/v1/tenant",      tenantRoutes);                   // protected — auth inside router
+app.use("/api/v1/backoffice",  backofficeRoutes);               // protected — superadmin only
 app.use("/api/v1/team",        authenticate, teamRoutes);       // protected — owner/admin only
 app.use("/api/v1/vehicles",    authenticate, vehicleRoutes);   // protected — JWT required
 app.use("/api/v1/whatsapp",    whatsappRoutes);     // protected — JWT required

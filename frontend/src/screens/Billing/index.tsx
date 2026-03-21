@@ -86,6 +86,12 @@ interface BillingStatus {
 // Trial Banner
 // ---------------------------------------------------------------------------
 
+const TRIAL_PRO_PERKS = [
+  "Hasta 3 usuarios en tu equipo",
+  "Logo de tu taller en presupuestos",
+  "Recordatorios automáticos de service",
+];
+
 function TrialBanner({ days_remaining }: { days_remaining: number | null }) {
   const days      = days_remaining ?? 0;
   const isExpired = days <= 0;
@@ -104,21 +110,38 @@ function TrialBanner({ days_remaining }: { days_remaining: number | null }) {
 
       <div className="relative flex items-start gap-3">
         <span className="text-[26px] leading-none mt-0.5 flex-shrink-0">🎁</span>
-        <div>
+        <div className="flex-1 min-w-0">
           <p className="text-orange-200 font-black text-sm leading-snug">
-            Estás disfrutando 14 días de prueba con los beneficios del plan Taller Pro
+            Estás disfrutando los beneficios del plan Taller Pro
           </p>
+
+          {/* Active Pro features */}
+          <ul className="mt-2 flex flex-col gap-1.5">
+            {TRIAL_PRO_PERKS.map((perk) => (
+              <li key={perk} className="flex items-center gap-1.5 text-xs text-orange-200/75">
+                <svg
+                  className="w-3 h-3 flex-shrink-0 text-orange-400"
+                  fill="none" viewBox="0 0 24 24"
+                  stroke="currentColor" strokeWidth={3}
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+                {perk}
+              </li>
+            ))}
+          </ul>
+
           {isExpired ? (
-            <p className="text-orange-400/70 text-xs mt-1.5">
+            <p className="text-orange-400/70 text-xs mt-2">
               Tu período de prueba expiró. Elegí un plan para reactivar tu cuenta.
             </p>
           ) : (
-            <p className="text-orange-300/70 text-xs mt-1.5">
+            <p className="text-orange-300/70 text-xs mt-2">
               Te quedan{" "}
               <span className="font-bold text-orange-300">
                 {days} {days === 1 ? "día" : "días"}
               </span>
-              . Elegí tu plan antes de que venza.
+              . Elegí tu plan para mantener el acceso.
             </p>
           )}
         </div>
@@ -185,6 +208,7 @@ function PlanCard({
   loading:     boolean;
 }) {
   const isTrialing    = subStatus === "trialing";
+  const isTrialPlan   = isTrialing && plan.id === "professional";
   const isCurrent     = currentPlan === plan.id && !isTrialing;
   const currentRank   = PLAN_RANK[currentPlan] ?? -1;
   const thisPlanRank  = PLAN_RANK[plan.id]     ??  0;
@@ -194,11 +218,12 @@ function PlanCard({
 
   // ── Button label ──────────────────────────────────────────────────────────
   let btnLabel: string;
-  if (loading)         btnLabel = "Procesando…";
-  else if (isCurrent)  btnLabel = "Plan Actual";
-  else if (isTrialing) btnLabel = "Elegir este plan";
-  else if (isUpgrade)  btnLabel = "Mejorar Plan";
-  else                 btnLabel = "Cambiar Plan";
+  if (loading)          btnLabel = "Procesando…";
+  else if (isCurrent)   btnLabel = "Plan Actual";
+  else if (isTrialPlan) btnLabel = "Activar para continuar";
+  else if (isTrialing)  btnLabel = "Elegir este plan";
+  else if (isUpgrade)   btnLabel = "Mejorar Plan";
+  else                  btnLabel = "Cambiar Plan";
 
   // ── Card styles ───────────────────────────────────────────────────────────
   const cardBase = "relative flex flex-col rounded-2xl p-5 gap-4 border transition-all";
@@ -249,22 +274,30 @@ function PlanCard({
   return (
     <div className={cardStyle} style={tier === "popular" ? popularBg : undefined}>
 
-      {/* Popular badge */}
-      {plan.badge && (
+      {/* Popular / Trial badge */}
+      {(plan.badge || isTrialPlan) && (
         <span
           className="absolute -top-3.5 left-1/2 -translate-x-1/2
                      text-white text-[10px] font-black uppercase tracking-[0.12em]
-                     px-4 py-1 rounded-full shadow-lg shadow-orange-900/50 whitespace-nowrap"
-          style={{
-            background: "linear-gradient(90deg, #C2410C 0%, #F97316 50%, #FB923C 100%)",
-          }}
+                     px-4 py-1 rounded-full whitespace-nowrap"
+          style={
+            isTrialPlan
+              ? {
+                  background: "linear-gradient(90deg, #065F46 0%, #059669 50%, #10B981 100%)",
+                  boxShadow: "0 4px 12px rgba(16,185,129,0.35)",
+                }
+              : {
+                  background: "linear-gradient(90deg, #C2410C 0%, #F97316 50%, #FB923C 100%)",
+                  boxShadow: "0 4px 12px rgba(194,65,12,0.40)",
+                }
+          }
         >
-          ✦ {plan.badge}
+          ✦ {isTrialPlan ? "EN PRUEBA ACTIVA" : plan.badge}
         </span>
       )}
 
       {/* Name + price */}
-      <div className={plan.badge ? "mt-2" : ""}>
+      <div className={plan.badge || isTrialPlan ? "mt-2" : ""}>
         <p
           className={`font-black text-base leading-tight ${
             tier === "popular" ? "text-orange-100" : "text-white"
@@ -330,15 +363,22 @@ function PlanCard({
       </ul>
 
       {/* CTA */}
-      <button
-        onClick={() => { if (!isCurrent && !loading) onSubscribe(plan.id); }}
-        disabled={isCurrent || loading}
-        className={`w-full h-12 rounded-xl text-sm transition-all
-                    disabled:opacity-50 disabled:cursor-not-allowed
-                    ${btnClass}`}
-      >
-        {btnLabel}
-      </button>
+      <div className="flex flex-col gap-1.5">
+        <button
+          onClick={() => { if (!isCurrent && !loading) onSubscribe(plan.id); }}
+          disabled={isCurrent || loading}
+          className={`w-full h-12 rounded-xl text-sm transition-all
+                      disabled:opacity-50 disabled:cursor-not-allowed
+                      ${btnClass}`}
+        >
+          {btnLabel}
+        </button>
+        {isTrialPlan && (
+          <p className="text-center text-[10px] text-emerald-400/60">
+            Para mantener el acceso luego del trial
+          </p>
+        )}
+      </div>
     </div>
   );
 }
@@ -409,7 +449,9 @@ export function Billing() {
               Planes disponibles
             </p>
             <p className="text-slate-500 text-xs">
-              Sin contratos. Cancelá cuando quieras.
+              {subStatus === "trialing"
+                ? "Elegí tu plan antes de que venza tu prueba. Sin contratos."
+                : "Sin contratos. Cancelá cuando quieras."}
             </p>
           </div>
 
