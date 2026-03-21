@@ -171,6 +171,8 @@ export function PublicTracking() {
                 tenantSlug={tenantSlug!}
                 orderNumber={orderNumber!}
                 queryKey={queryKey}
+                logoUrl={data.workshop.logo_url}
+                workshopName={data.workshop.name}
               />
             ))}
           </div>

@@ -44,7 +44,7 @@ export interface PublicOrderData {
   delivered_at: string | null;
   complaint: string;
   diagnosis: string | null;
-  workshop: { name: string; phone: string | null };
+  workshop: { name: string; phone: string | null; logo_url: string | null };
   vehicle: { plate: string; brand: string; model: string; year: number | null; color: string | null };
   quotes: PublicQuote[];
   history: PublicHistoryEntry[];

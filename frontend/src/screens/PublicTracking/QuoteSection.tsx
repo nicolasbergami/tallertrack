@@ -13,15 +13,17 @@ const CLP = (n: number) =>
   new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 }).format(n);
 
 interface Props {
-  quote: PublicQuote;
-  tenantSlug: string;
+  quote:       PublicQuote;
+  tenantSlug:  string;
   orderNumber: string;
-  queryKey: unknown[];
+  queryKey:    unknown[];
+  logoUrl?:    string | null;
+  workshopName?: string;
 }
 
 type ModalState = { open: false } | { open: true; action: "approve" | "reject" };
 
-export function QuoteSection({ quote, tenantSlug, orderNumber, queryKey }: Props) {
+export function QuoteSection({ quote, tenantSlug, orderNumber, queryKey, logoUrl, workshopName }: Props) {
   const queryClient = useQueryClient();
   const [modal, setModal] = useState<ModalState>({ open: false });
   const [reason, setReason] = useState("");
@@ -52,6 +54,21 @@ export function QuoteSection({ quote, tenantSlug, orderNumber, queryKey }: Props
         : isExpired  ? "border-gray-200 bg-gray-50"
         : "border-orange-200 bg-white shadow-sm"}
     `}>
+      {/* ── Workshop branding (logo) — only shown when tenant has logo set ── */}
+      {logoUrl && (
+        <div className="flex items-center gap-3 px-5 pt-4 pb-3 border-b border-gray-100">
+          <img
+            src={logoUrl}
+            alt={workshopName ?? "Logo del taller"}
+            className="h-9 max-w-[120px] object-contain"
+            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+          />
+          {workshopName && (
+            <span className="text-sm font-semibold text-gray-600">{workshopName}</span>
+          )}
+        </div>
+      )}
+
       {/* ── Header ── */}
       <div className={`
         flex items-center justify-between gap-3 px-5 py-4

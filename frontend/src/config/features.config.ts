@@ -24,7 +24,8 @@ export const PLAN_DISPLAY: Record<SubscriptionPlan, string> = {
 export type PremiumFeature =
   | "voice_diagnosis"
   | "ai_quote"
-  | "delivery_prediction";
+  | "delivery_prediction"
+  | "brand_logo";
 
 export interface FeatureGateConfig {
   /** Large emoji shown as the feature icon */
@@ -95,6 +96,27 @@ export const FEATURE_GATES: Record<PremiumFeature, FeatureGateConfig> = {
       "Edición rápida antes de enviar al cliente",
     ],
     ctaLabel:     "Activar Plan Starter",
+    ctaGradient:  "linear-gradient(135deg, #6D28D9 0%, #8B5CF6 50%, #A78BFA 100%)",
+    ctaGlow:      "rgba(139, 92, 246, 0.6)",
+  },
+
+  brand_logo: {
+    icon:         "🎨",
+    iconBg:       "linear-gradient(145deg, #12051F 0%, #2D0D59 60%, #12051F 100%)",
+    iconGlow:     "rgba(139, 92, 246, 0.55)",
+    accentText:   "text-violet-400",
+    accentBg:     "bg-violet-500/15",
+    accentBorder: "border-violet-500/40",
+    title:        "Personalizá tu Marca",
+    subtitle:
+      "Mostrá el logo de tu taller en los presupuestos que reciben tus clientes. Tu identidad, tu imagen.",
+    planRequired: "professional",
+    perks: [
+      "Logo en todos los presupuestos digitales",
+      "Primera impresión profesional para tus clientes",
+      "Diferenciá tu taller de la competencia",
+    ],
+    ctaLabel:     "Activar Plan Taller Pro",
     ctaGradient:  "linear-gradient(135deg, #6D28D9 0%, #8B5CF6 50%, #A78BFA 100%)",
     ctaGlow:      "rgba(139, 92, 246, 0.6)",
   },

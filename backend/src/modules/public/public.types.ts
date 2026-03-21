@@ -6,8 +6,9 @@
 import { WorkOrderStatus } from "../work-orders/work-order.types";
 
 export interface PublicWorkshop {
-  name: string;
-  phone: string | null;
+  name:     string;
+  phone:    string | null;
+  logo_url: string | null;
 }
 
 export interface PublicVehicle {

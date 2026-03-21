@@ -11,14 +11,24 @@ import {
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
-async function findTenantId(tenantSlug: string): Promise<{ id: string; name: string; phone: string | null }> {
-  const { rows } = await pool.query<{ id: string; name: string; phone: string | null }>(
-    `SELECT id, name, phone FROM tenants
+async function findTenantId(
+  tenantSlug: string,
+): Promise<{ id: string; name: string; phone: string | null; logo_url: string | null }> {
+  const { rows } = await pool.query<{
+    id: string; name: string; phone: string | null;
+    settings: Record<string, unknown>;
+  }>(
+    `SELECT id, name, phone, settings FROM tenants
       WHERE slug = $1 AND deleted_at IS NULL`,
     [tenantSlug]
   );
   if (!rows[0]) throw createHttpError(404, "Taller no encontrado.");
-  return rows[0];
+  return {
+    id:       rows[0].id,
+    name:     rows[0].name,
+    phone:    rows[0].phone,
+    logo_url: (rows[0].settings?.logo_url as string | null) ?? null,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -119,7 +129,7 @@ export const publicService = {
         delivered_at:      wo.delivered_at,
         complaint:         wo.complaint,
         diagnosis:         wo.diagnosis,
-        workshop: { name: tenant.name, phone: tenant.phone },
+        workshop: { name: tenant.name, phone: tenant.phone, logo_url: tenant.logo_url },
         vehicle: {
           plate: wo.plate, brand: wo.brand, model: wo.model,
           year: wo.year,   color: wo.color,

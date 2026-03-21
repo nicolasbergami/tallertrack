@@ -1,9 +1,13 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { AppShell } from "../../components/layout/AppShell";
 import { useAuthStore } from "../../store/auth.store";
 import { IconLogout, IconChevronRight, IconTeam } from "../../components/ui/Icons";
 import { WhatsAppSection } from "./WhatsAppSection";
+import { tenantApi } from "../../api/tenant.api";
+import { isFeatureAvailable } from "../../config/features.config";
+import { PremiumModal } from "../../components/ui/PremiumModal";
 
 const ROLE_LABELS: Record<string, string> = {
   owner:        "Propietario",
@@ -62,6 +66,11 @@ export function Profile() {
             <CopyRow label="ID de taller" display={user.tenantId.slice(0, 8) + "…"} fullValue={user.tenantId} />
           </div>
         </section>
+
+        {/* Brand logo — only visible to owner/admin */}
+        {(user.role === "owner" || user.role === "admin") && (
+          <LogoBrandingSection userPlan={user.plan} />
+        )}
 
         {/* Account */}
         <section>
@@ -136,6 +145,163 @@ export function Profile() {
         </p>
       </div>
     </AppShell>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// LogoBrandingSection
+// ---------------------------------------------------------------------------
+
+function LogoBrandingSection({ userPlan }: { userPlan?: string }) {
+  const hasAccess  = isFeatureAvailable(userPlan as any, "brand_logo");
+  const [urlInput, setUrlInput] = useState("");
+  const [paywallOpen, setPaywallOpen] = useState(false);
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["tenant-settings"],
+    queryFn:  () => tenantApi.getSettings(),
+    enabled:  hasAccess,
+  });
+
+  const currentLogoUrl = data?.settings?.logo_url ?? null;
+
+  // Pre-fill input once data loads
+  const [synced, setSynced] = useState(false);
+  if (!synced && currentLogoUrl && !urlInput) {
+    setUrlInput(currentLogoUrl);
+    setSynced(true);
+  }
+
+  const mutation = useMutation({
+    mutationFn: () => tenantApi.updateLogo(urlInput.trim() || null),
+    onSuccess: () => {
+      setSynced(false); // refetch will re-sync
+    },
+  });
+
+  return (
+    <section>
+      <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider px-1 mb-2">
+        Marca del Taller
+      </p>
+
+      <div className="bg-surface-card rounded-2xl border border-surface-border p-4 flex flex-col gap-4">
+
+        {/* Header row */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-lg">🎨</span>
+            <p className="text-slate-200 font-semibold text-sm">Logo del Taller</p>
+          </div>
+          {!hasAccess && (
+            <span className="text-[10px] font-black uppercase tracking-wider text-violet-400
+                             bg-violet-500/15 border border-violet-500/30 px-2 py-1 rounded-full">
+              Plan Pro
+            </span>
+          )}
+        </div>
+
+        {hasAccess ? (
+          <>
+            {/* Logo preview */}
+            <div className="flex items-center gap-4">
+              <div className="w-16 h-16 rounded-xl border border-surface-border bg-slate-800
+                              flex items-center justify-center flex-shrink-0 overflow-hidden">
+                {currentLogoUrl ? (
+                  <img
+                    src={currentLogoUrl}
+                    alt="Logo del taller"
+                    className="w-full h-full object-contain p-1"
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                  />
+                ) : (
+                  <span className="text-2xl opacity-40">🏪</span>
+                )}
+              </div>
+              <div>
+                <p className="text-slate-300 text-sm font-medium">
+                  {currentLogoUrl ? "Logo configurado" : "Sin logo"}
+                </p>
+                <p className="text-slate-500 text-xs mt-0.5">
+                  Se muestra en los presupuestos de tus clientes
+                </p>
+              </div>
+            </div>
+
+            {isLoading ? (
+              <div className="h-10 bg-slate-800 rounded-xl animate-pulse" />
+            ) : (
+              <div className="flex flex-col gap-2">
+                <input
+                  type="url"
+                  value={urlInput}
+                  onChange={(e) => setUrlInput(e.target.value)}
+                  placeholder="https://mi-taller.com/logo.png"
+                  className="w-full h-10 px-3 rounded-xl bg-slate-800 border border-surface-border
+                             text-slate-200 text-sm placeholder-slate-600
+                             focus:outline-none focus:ring-2 focus:ring-brand"
+                />
+                {mutation.isError && (
+                  <p className="text-red-400 text-xs">
+                    {(mutation.error as Error).message}
+                  </p>
+                )}
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => mutation.mutate()}
+                    disabled={mutation.isPending}
+                    className="flex-1 h-10 rounded-xl bg-brand hover:bg-brand-hover
+                               text-white font-semibold text-sm transition-colors
+                               disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {mutation.isPending ? "Guardando…" : mutation.isSuccess ? "¡Guardado!" : "Guardar logo"}
+                  </button>
+                  {currentLogoUrl && (
+                    <button
+                      onClick={() => { setUrlInput(""); mutation.mutate(); }}
+                      disabled={mutation.isPending}
+                      className="h-10 px-4 rounded-xl border border-slate-700 text-slate-400
+                                 hover:text-red-400 hover:border-red-900/50 text-sm transition-colors"
+                    >
+                      Quitar
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+          </>
+        ) : (
+          /* Locked state */
+          <button
+            onClick={() => setPaywallOpen(true)}
+            className="w-full flex items-center justify-between gap-3 px-4 py-3
+                       rounded-xl border border-dashed border-slate-700 bg-slate-800/40
+                       hover:border-violet-700/50 hover:bg-violet-950/20
+                       transition-all group active:scale-[0.99]"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl border border-slate-700 bg-slate-800
+                              flex items-center justify-center flex-shrink-0">
+                <span className="text-xl opacity-40">🏪</span>
+              </div>
+              <div className="text-left">
+                <p className="text-slate-400 text-sm font-medium">Subí el logo de tu taller</p>
+                <p className="text-slate-600 text-xs">Disponible en Plan Taller Pro</p>
+              </div>
+            </div>
+            <span className="text-slate-500 group-hover:text-violet-400 transition-colors text-xl">
+              🔒
+            </span>
+          </button>
+        )}
+      </div>
+
+      <PremiumModal
+        isOpen={paywallOpen}
+        onClose={() => setPaywallOpen(false)}
+        feature="brand_logo"
+      />
+    </section>
   );
 }
 
