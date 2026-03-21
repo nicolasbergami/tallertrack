@@ -3,8 +3,10 @@ import { z } from "zod";
 import { backofficeService } from "./backoffice.service";
 
 const UpdatePlanSchema = z.object({
-  plan:       z.enum(["free", "starter", "professional", "enterprise"]),
-  sub_status: z.enum(["active", "trialing", "inactive", "cancelled", "past_due"]),
+  plan:                   z.enum(["free", "starter", "professional", "enterprise"]),
+  sub_status:             z.enum(["active", "trialing", "inactive", "cancelled", "past_due"]),
+  trial_ends_at:          z.string().nullable().optional(),
+  sub_current_period_end: z.string().nullable().optional(),
 });
 
 export const backofficeController = {
@@ -49,9 +51,9 @@ export const backofficeController = {
   // PATCH /api/v1/backoffice/tenants/:id/plan
   async updateTenantPlan(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { id }             = req.params;
-      const { plan, sub_status } = UpdatePlanSchema.parse(req.body);
-      await backofficeService.updateTenantPlan(id, plan, sub_status);
+      const { id } = req.params;
+      const { plan, sub_status, trial_ends_at, sub_current_period_end } = UpdatePlanSchema.parse(req.body);
+      await backofficeService.updateTenantPlan(id, plan, sub_status, trial_ends_at, sub_current_period_end);
       res.json({ success: true, id, plan, sub_status });
     } catch (err) {
       next(err);

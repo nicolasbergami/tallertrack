@@ -149,16 +149,24 @@ export const backofficeService = {
 
   // ── Plan / status override ────────────────────────────────────────────────
 
-  async updateTenantPlan(tenantId: string, plan: string, subStatus: string): Promise<void> {
+  async updateTenantPlan(
+    tenantId:             string,
+    plan:                 string,
+    subStatus:            string,
+    trialEndsAt?:          string | null,
+    subCurrentPeriodEnd?: string | null,
+  ): Promise<void> {
     await withAdminContext(async (client) => {
       await client.query(`
         UPDATE tenants
-           SET plan       = $1,
-               sub_status = $2,
-               updated_at = NOW()
-         WHERE id = $3
+           SET plan                   = $1,
+               sub_status             = $2,
+               trial_ends_at          = $3,
+               sub_current_period_end = $4,
+               updated_at             = NOW()
+         WHERE id = $5
            AND deleted_at IS NULL
-      `, [plan, subStatus, tenantId]);
+      `, [plan, subStatus, trialEndsAt ?? null, subCurrentPeriodEnd ?? null, tenantId]);
     });
   },
 };

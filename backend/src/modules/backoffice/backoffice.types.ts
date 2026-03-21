@@ -43,6 +43,8 @@ export interface RecentActivity {
 }
 
 export interface PlanUpdateDTO {
-  plan:       string;
-  sub_status: string;
+  plan:                   string;
+  sub_status:             string;
+  trial_ends_at?:          string | null;
+  sub_current_period_end?: string | null;
 }

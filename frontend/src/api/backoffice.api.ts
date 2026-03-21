@@ -74,6 +74,17 @@ export const backofficeApi = {
   getActivity: (days = 30) =>
     api.get<{ activity: RecentActivity[] }>(`/backoffice/activity?days=${days}`),
 
-  updateTenantPlan: (id: string, plan: string, sub_status: string) =>
-    api.patch<{ success: boolean }>(`/backoffice/tenants/${id}/plan`, { plan, sub_status }),
+  updateTenantPlan: (
+    id:                     string,
+    plan:                   string,
+    sub_status:             string,
+    trial_ends_at?:          string | null,
+    sub_current_period_end?: string | null,
+  ) =>
+    api.patch<{ success: boolean }>(`/backoffice/tenants/${id}/plan`, {
+      plan,
+      sub_status,
+      trial_ends_at,
+      sub_current_period_end,
+    }),
 };

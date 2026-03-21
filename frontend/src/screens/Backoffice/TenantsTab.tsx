@@ -209,17 +209,35 @@ function PlanBadge({ plan }: { plan: string }) {
 
 // ── Plan Edit Modal ───────────────────────────────────────────────────────────
 
+// Convert ISO timestamp → YYYY-MM-DD for <input type="date">
+function toDateInput(iso: string | null | undefined): string {
+  if (!iso) return "";
+  try { return new Date(iso).toISOString().slice(0, 10); } catch { return ""; }
+}
+
+// Convert YYYY-MM-DD → ISO string (end of that day UTC), or null if empty
+function fromDateInput(val: string): string | null {
+  if (!val) return null;
+  return new Date(val + "T00:00:00.000Z").toISOString();
+}
+
 function PlanModal({ tenant, onClose, onToast }: {
   tenant:  BackofficeTenant;
   onClose: () => void;
   onToast: (msg: string, type: ToastType) => void;
 }) {
   const queryClient = useQueryClient();
-  const [plan,   setPlan]   = useState(tenant.plan);
-  const [status, setStatus] = useState(tenant.sub_status);
+  const [plan,       setPlan]       = useState(tenant.plan);
+  const [status,     setStatus]     = useState(tenant.sub_status);
+  const [trialEnd,   setTrialEnd]   = useState(toDateInput(tenant.trial_ends_at));
+  const [periodEnd,  setPeriodEnd]  = useState(toDateInput(tenant.sub_current_period_end));
 
   const mutation = useMutation({
-    mutationFn: () => backofficeApi.updateTenantPlan(tenant.id, plan, status),
+    mutationFn: () => backofficeApi.updateTenantPlan(
+      tenant.id, plan, status,
+      fromDateInput(trialEnd),
+      fromDateInput(periodEnd),
+    ),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["backoffice-tenants"] });
       onToast(`Plan de "${tenant.name}" actualizado correctamente.`, "success");
@@ -227,6 +245,8 @@ function PlanModal({ tenant, onClose, onToast }: {
     },
     onError: () => onToast("Error al actualizar el plan. Intentá de nuevo.", "error"),
   });
+
+  const inputCls = "h-10 px-3 rounded-xl border border-white/10 text-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand w-full";
 
   return (
     <div
@@ -244,25 +264,64 @@ function PlanModal({ tenant, onClose, onToast }: {
           </div>
         </div>
         <div className="h-px bg-white/5" />
+
         {/* Fields */}
         <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-1.5">
-            <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Plan</label>
-            <select value={plan} onChange={(e) => setPlan(e.target.value)}
-              className="h-10 px-3 rounded-xl border border-white/10 text-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
-              style={{ background:"#1A2235" }}>
-              {["free", ...PLANS].map((p) => <option key={p} value={p}>{PLAN_LABELS[p] ?? p}</option>)}
-            </select>
+
+          {/* Plan + Estado en fila */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Plan</label>
+              <select value={plan} onChange={(e) => setPlan(e.target.value)}
+                className={inputCls} style={{ background:"#1A2235" }}>
+                {["free", ...PLANS].map((p) => <option key={p} value={p}>{PLAN_LABELS[p] ?? p}</option>)}
+              </select>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Estado</label>
+              <select value={status} onChange={(e) => setStatus(e.target.value)}
+                className={inputCls} style={{ background:"#1A2235" }}>
+                {STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABELS[s] ?? s}</option>)}
+              </select>
+            </div>
           </div>
+
+          {/* Fin de trial */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Estado</label>
-            <select value={status} onChange={(e) => setStatus(e.target.value)}
-              className="h-10 px-3 rounded-xl border border-white/10 text-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
-              style={{ background:"#1A2235" }}>
-              {STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABELS[s] ?? s}</option>)}
-            </select>
+            <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+              Fin de trial
+              {status !== "trialing" && (
+                <span className="text-slate-700 font-normal normal-case tracking-normal">(solo aplica en trialing)</span>
+              )}
+            </label>
+            <input
+              type="date"
+              value={trialEnd}
+              onChange={(e) => setTrialEnd(e.target.value)}
+              className={`${inputCls} ${status !== "trialing" ? "opacity-40" : ""}`}
+              style={{ background:"#1A2235", colorScheme:"dark" }}
+            />
           </div>
+
+          {/* Vencimiento de suscripción */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+              Vencimiento de suscripción
+              {status === "trialing" && (
+                <span className="text-slate-700 font-normal normal-case tracking-normal">(no aplica en trialing)</span>
+              )}
+            </label>
+            <input
+              type="date"
+              value={periodEnd}
+              onChange={(e) => setPeriodEnd(e.target.value)}
+              className={`${inputCls} ${status === "trialing" ? "opacity-40" : ""}`}
+              style={{ background:"#1A2235", colorScheme:"dark" }}
+            />
+          </div>
+
         </div>
+
         <div className="flex gap-2 pt-1">
           <button onClick={onClose} className="flex-1 h-10 rounded-xl border border-white/10 text-slate-400 hover:bg-white/5 text-sm transition-colors">
             Cancelar
@@ -506,7 +565,13 @@ export function TenantsTab() {
     mutationFn: () => {
       if (!activeTenant) throw new Error("No tenant selected");
       const newStatus = modalType === "block" ? "inactive" : "active";
-      return backofficeApi.updateTenantPlan(activeTenant.id, activeTenant.plan, newStatus);
+      return backofficeApi.updateTenantPlan(
+        activeTenant.id,
+        activeTenant.plan,
+        newStatus,
+        activeTenant.trial_ends_at,
+        activeTenant.sub_current_period_end,
+      );
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["backoffice-tenants"] });
