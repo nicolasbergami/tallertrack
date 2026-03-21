@@ -235,12 +235,14 @@ export const sessionManager = {
             );
           }
         } else {
+          // Clear stale credentials so next startSession generates a fresh QR
           await pool.query(
-            `UPDATE whatsapp_sessions SET status = 'disconnected', updated_at = NOW() WHERE tenant_id = $1`,
+            `UPDATE whatsapp_sessions SET status = 'disconnected', creds = '{}'::jsonb, updated_at = NOW() WHERE tenant_id = $1`,
             [tenantId]
           );
+          await pool.query(`DELETE FROM whatsapp_session_keys WHERE tenant_id = $1`, [tenantId]);
           qrEmitter.emit("disconnected", { reason: "logged_out" });
-          console.log(`[WhatsApp] Tenant ${tenantId} logged out.`);
+          console.log(`[WhatsApp] Tenant ${tenantId} logged out — credentials cleared.`);
         }
       }
     });
