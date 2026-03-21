@@ -31,6 +31,8 @@ export function Dashboard() {
   const navigate    = useNavigate();
   const queryClient = useQueryClient();
   const tenantName  = useAuthStore((s) => s.user?.tenantName ?? "");
+  const userPlan    = useAuthStore((s) => s.user?.plan);
+  const subStatus   = useAuthStore((s) => s.user?.sub_status);
 
   const [search,              setSearch]              = useState("");
   const [activeTab,           setActiveTab]           = useState<WorkOrderStatus | "all">("all");
@@ -220,6 +222,16 @@ export function Dashboard() {
               dotColor={stats.stale > 0 ? "bg-red-400 animate-pulse" : undefined}
             />
           </div>
+        )}
+
+        {/* ── Capacity Widget ── */}
+        {!isLoading && (
+          <CapacityWidget
+            current={stats.active}
+            plan={userPlan}
+            subStatus={subStatus}
+            onUpgrade={() => navigate("/billing")}
+          />
         )}
 
         {/* ── Search ── */}
@@ -856,6 +868,110 @@ function MechanicChip({
       )}
       {label}
     </button>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// CapacityWidget — shows active vehicles vs plan limit with a progress bar
+// ---------------------------------------------------------------------------
+
+const PLAN_MAX: Partial<Record<string, number | null>> = {
+  starter:      10,
+  professional: 30,
+  enterprise:   null, // unlimited
+};
+
+function CapacityWidget({
+  current,
+  plan,
+  subStatus,
+  onUpgrade,
+}: {
+  current:   number;
+  plan?:     string;
+  subStatus?: string;
+  onUpgrade: () => void;
+}) {
+  // Trialing gets Pro limits; enterprise is unlimited (don't show widget)
+  const effectivePlan = subStatus === "trialing" ? "professional" : (plan ?? "starter");
+  const max           = PLAN_MAX[effectivePlan] ?? 10;
+
+  if (max === null) return null; // enterprise: unlimited, skip widget
+
+  const pct       = Math.min(100, Math.round((current / max) * 100));
+  const isWarning = pct >= 80;
+  const isFull    = current >= max;
+
+  return (
+    <div
+      className={`mx-4 mt-3 rounded-xl border px-4 py-3 transition-colors ${
+        isFull
+          ? "bg-red-950/30 border-red-800/50"
+          : isWarning
+          ? "bg-amber-950/20 border-amber-700/40"
+          : "bg-surface-card border-surface-border"
+      }`}
+    >
+      {/* Header row */}
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <div className="flex items-center gap-1.5">
+          <svg
+            className={`w-3.5 h-3.5 flex-shrink-0 ${
+              isFull ? "text-red-400" : isWarning ? "text-amber-400" : "text-slate-500"
+            }`}
+            fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round"
+              d="M8.25 18.75a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 01-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 00-3.213-9.193 2.056 2.056 0 00-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.958c0-.568-.422-1.048-.987-1.106a48.554 48.554 0 00-10.026 0 1.106 1.106 0 00-.987 1.106v7.635m12-6.677v6.677m0 4.5v-4.5m0 0h-12" />
+          </svg>
+          <span className={`text-xs font-semibold ${
+            isFull ? "text-red-400" : isWarning ? "text-amber-400" : "text-slate-400"
+          }`}>
+            Capacidad del Taller
+          </span>
+        </div>
+
+        {/* Count + upgrade CTA */}
+        <div className="flex items-center gap-2">
+          <span className={`text-sm font-black tabular-nums ${
+            isFull ? "text-red-300" : isWarning ? "text-amber-200" : "text-slate-200"
+          }`}>
+            {current}
+            <span className="text-slate-500 font-normal text-xs"> / {max}</span>
+          </span>
+          {isWarning && (
+            <button
+              onClick={onUpgrade}
+              className={`text-[10px] font-bold px-2 py-1 rounded-lg transition-all active:scale-95 ${
+                isFull
+                  ? "bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30"
+                  : "bg-amber-500/20 text-amber-400 border border-amber-500/30 hover:bg-amber-500/30"
+              }`}
+            >
+              {isFull ? "¡Ampliar!" : "Mejorar →"}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Progress bar */}
+      <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+        <div
+          className={`h-full rounded-full transition-all duration-700 ${
+            isFull    ? "bg-red-500" :
+            isWarning ? "bg-amber-400" :
+            "bg-brand"
+          }`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+
+      {isFull && (
+        <p className="text-[10px] text-red-400/80 mt-1.5 leading-snug">
+          Capacidad completa. Mejorá tu plan para seguir registrando vehículos.
+        </p>
+      )}
+    </div>
   );
 }
 

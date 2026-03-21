@@ -13,6 +13,8 @@ interface User {
   /** Subscription plan — populated from the login response / JWT.
    *  Defaults to "free" when absent. */
   plan?: SubscriptionPlan;
+  /** Subscription status — "trialing" | "active" | "inactive" | etc. */
+  sub_status?: string;
 }
 
 interface AuthState {

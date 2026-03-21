@@ -4,6 +4,7 @@ import {
   IconOrders, IconPlus, IconHistory, IconUser, IconBack, IconChart,
 } from "../ui/Icons";
 import { GlobalAlertBanner } from "../alerts/GlobalAlertBanner";
+import { useAuthStore } from "../../store/auth.store";
 
 interface Props {
   children: ReactNode;
@@ -14,7 +15,8 @@ interface Props {
 }
 
 export function AppShell({ children, title, backTo, action, footer }: Props) {
-  const navigate = useNavigate();
+  const navigate   = useNavigate();
+  const user       = useAuthStore((s) => s.user);
 
   return (
     <div className="min-h-screen bg-surface flex flex-col max-w-2xl mx-auto">
@@ -38,9 +40,20 @@ export function AppShell({ children, title, backTo, action, footer }: Props) {
           <img src="/logo.png" alt="TallerTrack" className="h-12 w-auto" />
         )}
 
-        <h1 className="flex-1 font-semibold text-sm text-slate-300 truncate">
-          {title ?? ""}
-        </h1>
+        {/* Title + plan badge */}
+        <div className="flex-1 flex items-center gap-2 min-w-0">
+          <h1 className="font-semibold text-sm text-slate-300 truncate">
+            {title ?? ""}
+          </h1>
+          {/* Badge only on root screens (no back button) */}
+          {!backTo && user && (
+            <PlanBadge
+              plan={user.plan}
+              subStatus={user.sub_status}
+              onClick={() => navigate("/billing")}
+            />
+          )}
+        </div>
 
         {action && <div className="flex-shrink-0">{action}</div>}
       </header>
@@ -66,6 +79,54 @@ export function AppShell({ children, title, backTo, action, footer }: Props) {
         <NavItem to="/profile"   Icon={IconUser}    label="Perfil"   />
       </nav>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// PlanBadge — shows current plan in the topbar; links to /billing
+// ---------------------------------------------------------------------------
+
+interface PlanBadgeProps {
+  plan?:      string;
+  subStatus?: string;
+  onClick:    () => void;
+}
+
+function PlanBadge({ plan, subStatus, onClick }: PlanBadgeProps) {
+  const isTrialing = subStatus === "trialing";
+
+  // Don't render if no plan info available
+  if (!plan && !isTrialing) return null;
+
+  let label: string;
+  let cls:   string;
+
+  if (isTrialing) {
+    label = "14 Días de Prueba";
+    cls   = "bg-orange-500/20 text-orange-300 border-orange-500/40 hover:bg-orange-500/30";
+  } else if (plan === "enterprise") {
+    label = "Plan Platinum";
+    cls   = "bg-violet-500/15 text-violet-400 border-violet-500/35 hover:bg-violet-500/25";
+  } else if (plan === "professional") {
+    label = "Plan Pro";
+    cls   = "bg-brand/15 text-brand border-brand/30 hover:bg-brand/25";
+  } else if (plan === "starter") {
+    label = "Plan Independiente";
+    cls   = "bg-slate-700/50 text-slate-400 border-slate-600/50 hover:bg-slate-700/70";
+  } else {
+    return null;
+  }
+
+  return (
+    <button
+      onClick={onClick}
+      className={`flex-shrink-0 px-1.5 py-[3px] rounded-md border
+                  text-[9px] font-black uppercase tracking-wider
+                  whitespace-nowrap transition-all active:scale-95
+                  ${cls}`}
+    >
+      {label}
+    </button>
   );
 }
 
