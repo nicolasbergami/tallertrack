@@ -10,7 +10,7 @@ const UpdatePlanSchema = z.object({
 export const backofficeController = {
 
   // GET /api/v1/backoffice/dashboard
-  async getDashboard(req: Request, res: Response, next: NextFunction): Promise<void> {
+  async getDashboard(_req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const data = await backofficeService.getDashboard();
       res.json(data);
