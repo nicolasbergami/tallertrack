@@ -1,25 +1,48 @@
 import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  DndContext,
+  DragOverlay,
+  useDraggable,
+  useDroppable,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
+import { CSS } from "@dnd-kit/utilities";
 import { AppShell } from "../../components/layout/AppShell";
 import { WorkOrderCard } from "./WorkOrderCard";
 import { workOrdersApi } from "../../api/work-orders.api";
 import { api } from "../../api/client";
 import { WorkOrderStatus, WorkOrderDetail } from "../../types/work-order";
-import { ACTIVE_STATUSES, STATUS_CONFIG } from "../../config/status.config";
+import { ACTIVE_STATUSES, STATUS_CONFIG, NEXT_STATES } from "../../config/status.config";
 import { IconSearch, IconX, IconPlus, IconList, IconGrid } from "../../components/ui/Icons";
 import { useAuthStore } from "../../store/auth.store";
 
 const KANBAN_COLUMNS: WorkOrderStatus[] = ACTIVE_STATUSES;
 const STALE_MS = 8 * 3600 * 1000; // 8 hours
 
+function formatCLP(amount: number): string {
+  if (amount >= 1_000_000) return `$${(amount / 1_000_000).toFixed(1)}M`;
+  if (amount >= 1_000)     return `$${Math.round(amount / 1_000)}k`;
+  return `$${amount}`;
+}
+
 export function Dashboard() {
-  const navigate  = useNavigate();
-  const tenantName = useAuthStore((s) => s.user?.tenantName ?? "");
-  const [search,         setSearch]         = useState("");
-  const [activeTab,      setActiveTab]      = useState<WorkOrderStatus | "all">("all");
-  const [viewMode,       setViewMode]       = useState<"list" | "kanban">("list");
-  const [mechanicFilter, setMechanicFilter] = useState<string | null>(null);
+  const navigate    = useNavigate();
+  const queryClient = useQueryClient();
+  const tenantName  = useAuthStore((s) => s.user?.tenantName ?? "");
+
+  const [search,              setSearch]              = useState("");
+  const [activeTab,           setActiveTab]           = useState<WorkOrderStatus | "all">("all");
+  const [viewMode,            setViewMode]            = useState<"list" | "kanban">("list");
+  const [mechanicFilter,      setMechanicFilter]      = useState<string | null>(null);
+  const [pendingTransitions,  setPendingTransitions]  = useState<Record<string, WorkOrderStatus>>({});
+  const [draggingOrderId,     setDraggingOrderId]     = useState<string | null>(null);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["work-orders"],
@@ -27,19 +50,56 @@ export function Dashboard() {
     refetchInterval: 30_000,
   });
 
+  const transitionMut = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: WorkOrderStatus }) =>
+      workOrdersApi.transition(id, { status }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["work-orders"] });
+    },
+    onError: (_err, { id }) => {
+      setPendingTransitions((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+    },
+  });
+
+  function handleTransition(id: string, status: WorkOrderStatus) {
+    setPendingTransitions((prev) => ({ ...prev, [id]: status }));
+    transitionMut.mutate({ id, status }, {
+      onSuccess: () => {
+        setPendingTransitions((prev) => {
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        });
+      },
+    });
+  }
+
   const orders: WorkOrderDetail[] = data?.data ?? [];
+
   const activeOrders = useMemo(
     () => orders.filter(o => ACTIVE_STATUSES.includes(o.status)),
     [orders],
   );
 
+  // Apply optimistic pending transitions for immediate visual feedback
+  const ordersWithPending = useMemo(
+    () => activeOrders.map(o => ({
+      ...o,
+      status: (pendingTransitions[o.id] ?? o.status) as WorkOrderStatus,
+    })),
+    [activeOrders, pendingTransitions],
+  );
+
   const counts = useMemo(() => {
     const map: Partial<Record<WorkOrderStatus, number>> = {};
-    activeOrders.forEach((o) => { map[o.status] = (map[o.status] ?? 0) + 1; });
+    ordersWithPending.forEach((o) => { map[o.status] = (map[o.status] ?? 0) + 1; });
     return map;
-  }, [activeOrders]);
+  }, [ordersWithPending]);
 
-  // Unique mechanics with at least one active order (sorted)
   const mechanics = useMemo(() => {
     const names = new Set<string>();
     activeOrders.forEach((o) => { if (o.assigned_user_name) names.add(o.assigned_user_name); });
@@ -47,20 +107,27 @@ export function Dashboard() {
   }, [activeOrders]);
 
   const stats = useMemo(() => {
-    const now = Date.now();
+    const now      = Date.now();
+    const todayStr = new Date().toDateString();
+    const billingToday = orders.reduce((sum, o) => {
+      if (o.paid_at && new Date(o.paid_at).toDateString() === todayStr) {
+        return sum + (o.paid_amount ?? 0);
+      }
+      return sum;
+    }, 0);
     return {
-      active:        activeOrders.length,
-      ready:         counts.ready ?? 0,
-      awaitingParts: counts.awaiting_parts ?? 0,
-      stale:         activeOrders.filter(o =>
+      active:       activeOrders.length,
+      ready:        counts.ready ?? 0,
+      billingToday,
+      stale:        activeOrders.filter(o =>
         o.status !== "ready" &&
         (now - new Date(o.received_at).getTime()) > STALE_MS
       ).length,
     };
-  }, [activeOrders, counts]);
+  }, [activeOrders, counts, orders]);
 
   const filtered = useMemo(() => {
-    let list = activeOrders;
+    let list = ordersWithPending;
     if (search.trim()) {
       const q = search.trim().toUpperCase();
       list = list.filter(o =>
@@ -77,13 +144,12 @@ export function Dashboard() {
       list = list.filter(o => o.assigned_user_name === mechanicFilter);
     }
     return list;
-  }, [activeOrders, search, activeTab, mechanicFilter]);
+  }, [ordersWithPending, search, activeTab, mechanicFilter]);
 
-  // Smart sections — only when "all" tab is active and no search query
   const sections = useMemo(() => {
     if (activeTab !== "all" || search.trim()) return null;
 
-    const now = Date.now();
+    const now     = Date.now();
     const isStale = (o: WorkOrderDetail) =>
       o.status !== "ready" && (now - new Date(o.received_at).getTime()) > STALE_MS;
 
@@ -96,7 +162,7 @@ export function Dashboard() {
       });
 
     const attentionIds = new Set(needsAttention.map(o => o.id));
-    const inProgress = filtered
+    const inProgress   = filtered
       .filter(o => !attentionIds.has(o.id))
       .sort((a, b) => new Date(a.received_at).getTime() - new Date(b.received_at).getTime());
 
@@ -131,18 +197,18 @@ export function Dashboard() {
     >
       <div className="flex flex-col">
 
-        {/* ── Stats Strip ── */}
+        {/* ── Stats Strip (métricas del día) ── */}
         {!isLoading && activeOrders.length > 0 && (
           <div className="grid grid-cols-4 border-b border-surface-border bg-surface">
             <StatTile
-              label="Activas"
+              label="En taller"
               value={stats.active}
-              sublabel="en taller"
+              sublabel="activas"
               active={activeTab === "all" && !search}
               onClick={() => { setActiveTab("all"); setSearch(""); }}
             />
             <StatTile
-              label="Listas"
+              label="Listos"
               value={stats.ready}
               sublabel="para retirar"
               valueColor={stats.ready > 0 ? "text-green-400" : "text-slate-600"}
@@ -151,13 +217,11 @@ export function Dashboard() {
               onClick={() => { setActiveTab("ready"); setSearch(""); }}
             />
             <StatTile
-              label="Repuestos"
-              value={stats.awaitingParts}
-              sublabel="en espera"
-              valueColor={stats.awaitingParts > 0 ? "text-amber-400" : "text-slate-600"}
-              dotColor={stats.awaitingParts > 0 ? "bg-amber-400" : undefined}
-              active={activeTab === "awaiting_parts"}
-              onClick={() => { setActiveTab("awaiting_parts"); setSearch(""); }}
+              label="Cobrado hoy"
+              value={formatCLP(stats.billingToday)}
+              sublabel="facturación"
+              valueColor={stats.billingToday > 0 ? "text-brand" : "text-slate-600"}
+              dotColor={stats.billingToday > 0 ? "bg-brand" : undefined}
             />
             <StatTile
               label="Vencidas"
@@ -223,7 +287,7 @@ export function Dashboard() {
           </div>
         )}
 
-        {/* ── Mechanic filter chips — only when there are assigned orders ── */}
+        {/* ── Mechanic filter chips ── */}
         {!isLoading && mechanics.length > 0 && (
           <div className="flex overflow-x-auto gap-2 px-4 py-2.5 border-b border-surface-border scrollbar-hide">
             <MechanicChip
@@ -253,7 +317,14 @@ export function Dashboard() {
         )}
 
         {!isLoading && !error && viewMode === "kanban" && (
-          <KanbanView orders={activeOrders} search={search} counts={counts} />
+          <KanbanView
+            orders={ordersWithPending}
+            search={search}
+            counts={counts}
+            draggingOrderId={draggingOrderId}
+            onDraggingChange={setDraggingOrderId}
+            onTransition={handleTransition}
+          />
         )}
       </div>
     </AppShell>
@@ -268,7 +339,7 @@ function StatTile({
   dotColor,
   onClick, active = false,
 }: {
-  label: string; value: number; sublabel: string;
+  label: string; value: number | string; sublabel: string;
   valueColor?: string; dotColor?: string;
   onClick?: () => void; active?: boolean;
 }) {
@@ -400,51 +471,199 @@ function FlatList({ orders }: { orders: WorkOrderDetail[] }) {
   );
 }
 
+// ── Kanban with Drag-and-Drop ───────────────────────────────────────────────
+
 function KanbanView({
-  orders, search, counts,
+  orders, search, counts, draggingOrderId, onDraggingChange, onTransition,
 }: {
   orders: WorkOrderDetail[];
   search: string;
   counts: Partial<Record<WorkOrderStatus, number>>;
+  draggingOrderId: string | null;
+  onDraggingChange: (id: string | null) => void;
+  onTransition: (id: string, status: WorkOrderStatus) => void;
 }) {
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 8 },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 200, tolerance: 5 },
+    }),
+  );
+
+  const draggingOrder = draggingOrderId
+    ? orders.find(o => o.id === draggingOrderId) ?? null
+    : null;
+
+  const validTargets: WorkOrderStatus[] = draggingOrder
+    ? (NEXT_STATES[draggingOrder.status] ?? [])
+    : [];
+
+  function handleDragStart({ active }: DragStartEvent) {
+    onDraggingChange(active.id as string);
+  }
+
+  function handleDragEnd({ active, over }: DragEndEvent) {
+    onDraggingChange(null);
+    if (!over) return;
+    const order        = orders.find(o => o.id === active.id);
+    const targetStatus = over.id as WorkOrderStatus;
+    if (order && targetStatus !== order.status && validTargets.includes(targetStatus)) {
+      onTransition(order.id, targetStatus);
+    }
+  }
+
+  function handleDragCancel() {
+    onDraggingChange(null);
+  }
+
   return (
-    <div className="flex overflow-x-auto gap-3 p-4 pb-6 snap-x snap-mandatory">
-      {KANBAN_COLUMNS.map((status) => {
-        const cfg = STATUS_CONFIG[status];
-        const colOrders = orders.filter(
-          (o) => o.status === status &&
-            (!search.trim() || o.vehicle_plate.toUpperCase().includes(search.toUpperCase())),
-        );
-        return (
-          <div key={status} className="flex flex-col gap-2 flex-shrink-0 w-72 snap-start">
-            <div className={`flex items-center gap-2 px-3 py-2 rounded-xl ${cfg.bgColor}`}>
-              <span className={`w-2 h-2 rounded-full ${cfg.dotColor} flex-shrink-0`} />
-              <span className={`font-semibold text-xs ${cfg.textColor} flex-1 uppercase tracking-wide`}>
-                {cfg.shortLabel}
-              </span>
-              <span className={`font-black text-sm ${cfg.textColor}`}>{counts[status] ?? 0}</span>
-            </div>
-            <div className="flex flex-col gap-2">
-              {colOrders.map((o) => <WorkOrderCard key={o.id} order={o} />)}
-              {colOrders.length === 0 && (
-                <div className="text-center text-slate-700 text-xs py-6 bg-surface-card/30
-                                rounded-xl border border-dashed border-surface-border/60">
-                  Sin órdenes
-                </div>
-              )}
-            </div>
+    <DndContext
+      sensors={sensors}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+      onDragCancel={handleDragCancel}
+    >
+      <div className="flex overflow-x-auto gap-3 p-4 pb-6 snap-x snap-mandatory">
+        {KANBAN_COLUMNS.map((status) => {
+          const colOrders = orders.filter(
+            (o) =>
+              o.status === status &&
+              (!search.trim() ||
+                o.vehicle_plate.toUpperCase().includes(search.toUpperCase()) ||
+                (o.client_name ?? "").toUpperCase().includes(search.toUpperCase())),
+          );
+          const isValidTarget  = validTargets.includes(status);
+          const isDraggingAny  = draggingOrderId !== null;
+          return (
+            <DroppableColumn
+              key={status}
+              status={status}
+              orders={colOrders}
+              count={counts[status] ?? 0}
+              isValidTarget={isValidTarget}
+              isDraggingAny={isDraggingAny}
+            />
+          );
+        })}
+      </div>
+
+      {/* Floating card clone while dragging */}
+      <DragOverlay dropAnimation={null}>
+        {draggingOrder && (
+          <div className="w-72 rotate-1 opacity-95 shadow-2xl">
+            <WorkOrderCard order={draggingOrder} />
           </div>
-        );
-      })}
+        )}
+      </DragOverlay>
+    </DndContext>
+  );
+}
+
+// ── Droppable column ────────────────────────────────────────────────────────
+
+function DroppableColumn({
+  status, orders, count, isValidTarget, isDraggingAny,
+}: {
+  status: WorkOrderStatus;
+  orders: WorkOrderDetail[];
+  count: number;
+  isValidTarget: boolean;
+  isDraggingAny: boolean;
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: status });
+  const cfg = STATUS_CONFIG[status];
+
+  const headerGlow = isOver && isValidTarget
+    ? "ring-2 ring-inset ring-white/30"
+    : "";
+
+  const columnOpacity = isDraggingAny && !isValidTarget
+    ? "opacity-40"
+    : "opacity-100";
+
+  return (
+    <div
+      className={`flex flex-col gap-2 flex-shrink-0 w-72 snap-start transition-opacity duration-150 ${columnOpacity}`}
+    >
+      {/* Column header */}
+      <div
+        className={`flex items-center gap-2 px-3 py-2 rounded-xl ${cfg.bgColor} ${headerGlow} transition-all duration-150`}
+      >
+        <span className={`w-2 h-2 rounded-full ${cfg.dotColor} flex-shrink-0`} />
+        <span className={`font-semibold text-xs ${cfg.textColor} flex-1 uppercase tracking-wide`}>
+          {cfg.shortLabel}
+        </span>
+        <span className={`font-black text-sm ${cfg.textColor}`}>{count}</span>
+        {isOver && isValidTarget && (
+          <span className="text-[10px] text-white/60 font-semibold">Soltar aquí</span>
+        )}
+      </div>
+
+      {/* Drop zone */}
+      <div
+        ref={setNodeRef}
+        className={`flex flex-col gap-2 min-h-[4rem] rounded-xl transition-all duration-150
+          ${isOver && isValidTarget
+            ? "bg-white/5 ring-2 ring-dashed ring-white/20 p-1"
+            : isDraggingAny && isValidTarget
+              ? "bg-white/5 ring-1 ring-dashed ring-white/10 p-1"
+              : ""
+          }`}
+      >
+        {orders.map((o) => <DraggableCard key={o.id} order={o} />)}
+        {orders.length === 0 && (
+          <div className={`text-center text-xs py-6 rounded-xl border border-dashed transition-colors
+            ${isOver && isValidTarget
+              ? "text-white/40 border-white/20 bg-white/5"
+              : "text-slate-700 border-surface-border/60 bg-surface-card/30"
+            }`}>
+            {isDraggingAny && isValidTarget ? "Soltar aquí" : "Sin órdenes"}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
+// ── Draggable card wrapper ──────────────────────────────────────────────────
+
+function DraggableCard({ order }: { order: WorkOrderDetail }) {
+  const canDrag = (NEXT_STATES[order.status] ?? []).length > 0;
+
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id:       order.id,
+    data:     { order },
+    disabled: !canDrag,
+  });
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={transform ? { transform: CSS.Transform.toString(transform) } : undefined}
+      className={`touch-none transition-opacity duration-100 ${isDragging ? "opacity-0" : ""}`}
+      {...listeners}
+      {...attributes}
+    >
+      <WorkOrderCard order={order} />
+      {/* Drag hint for draggable cards */}
+      {canDrag && !isDragging && (
+        <div className="flex justify-center pt-0.5 pb-0.5 -mt-1">
+          <span className="w-8 h-0.5 rounded-full bg-slate-700/60" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Empty state ─────────────────────────────────────────────────────────────
+
 function EmptyState() {
   const { data: waStatus } = useQuery<{ status: string }>({
-    queryKey:    ["whatsapp-status"],
-    queryFn:     () => api.get("/whatsapp/status"),
-    staleTime:   60_000,
+    queryKey:  ["whatsapp-status"],
+    queryFn:   () => api.get("/whatsapp/status"),
+    staleTime: 60_000,
   });
 
   const waConnected = waStatus?.status === "connected";
@@ -466,14 +685,12 @@ function EmptyStateOnboarding() {
                      flex items-center justify-center"
           style={{ boxShadow: "0 0 32px rgba(74,222,128,0.2), 0 0 8px rgba(74,222,128,0.1)" }}
         >
-          {/* WhatsApp inline SVG */}
           <svg className="w-10 h-10 text-green-400" viewBox="0 0 24 24" fill="currentColor">
             <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
           </svg>
         </div>
       </div>
 
-      {/* Headline */}
       <div className="space-y-2">
         <p className="text-slate-100 font-bold text-xl leading-snug">
           ¡Bienvenido a TallerTrack!
@@ -483,22 +700,20 @@ function EmptyStateOnboarding() {
         </p>
       </div>
 
-      {/* Progress steps */}
       <div className="w-full max-w-xs flex flex-col gap-2">
-        <StepRow done label="Cuenta creada" />
+        <StepRow done  label="Cuenta creada" />
         <StepRow active label="Conectar WhatsApp" />
-        <StepRow label="Crear primera orden" />
+        <StepRow       label="Crear primera orden" />
       </div>
 
-      {/* CTA */}
       <div className="flex flex-col gap-3 w-full max-w-xs">
         <button
           onClick={() => navigate("/profile")}
           className="w-full h-12 rounded-xl font-bold text-sm text-white
                      flex items-center justify-center gap-2 transition-colors"
           style={{
-            background:  "linear-gradient(135deg, #15803D 0%, #16A34A 60%, #15803D 100%)",
-            boxShadow:   "0 2px 16px rgba(22,163,74,0.35)",
+            background: "linear-gradient(135deg, #15803D 0%, #16A34A 60%, #15803D 100%)",
+            boxShadow:  "0 2px 16px rgba(22,163,74,0.35)",
           }}
         >
           <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
@@ -523,11 +738,7 @@ function EmptyStateReady() {
 
   return (
     <div className="flex flex-col items-center justify-center py-12 px-8 gap-6 text-center animate-slide-up">
-
-      {/* Illustration: car on lift */}
       <CarOnLiftSVG />
-
-      {/* Text */}
       <div className="space-y-1.5">
         <p className="text-slate-100 font-bold text-xl">Todo listo.</p>
         <p className="text-brand font-semibold text-sm">Tu taller está automatizado.</p>
@@ -535,8 +746,6 @@ function EmptyStateReady() {
           Cuando llegue tu primer auto, creá la orden de trabajo acá.
         </p>
       </div>
-
-      {/* CTA */}
       <button
         onClick={() => navigate("/new")}
         className="flex items-center gap-2 px-6 h-12 rounded-xl bg-brand
@@ -558,7 +767,6 @@ function StepRow({ label, done, active }: { label: string; done?: boolean; activ
                      ${done   ? "bg-green-950/30 border-green-800/40"
                      : active ? "bg-brand/10 border-brand/30"
                      :          "bg-surface-card border-surface-border opacity-50"}`}>
-      {/* Icon */}
       <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0
                        ${done   ? "bg-green-700/60"
                        : active ? "bg-brand/20 border border-brand/40"
@@ -585,82 +793,44 @@ function StepRow({ label, done, active }: { label: string; done?: boolean; activ
 function CarOnLiftSVG() {
   return (
     <svg viewBox="0 0 200 150" className="w-52 h-40" fill="none" xmlns="http://www.w3.org/2000/svg">
-      {/* Ground glow */}
       <ellipse cx="100" cy="142" rx="72" ry="7" fill="#EA580C" opacity="0.12" />
-
-      {/* Lift columns */}
       <rect x="20" y="88" width="8" height="52" rx="4" fill="#374151" />
       <rect x="172" y="88" width="8" height="52" rx="4" fill="#374151" />
-
-      {/* Base feet */}
       <rect x="12" y="136" width="24" height="6" rx="3" fill="#4B5563" />
       <rect x="164" y="136" width="24" height="6" rx="3" fill="#4B5563" />
-
-      {/* Lift arms (orange) */}
       <line x1="28" y1="102" x2="62" y2="88" stroke="#EA580C" strokeWidth="4" strokeLinecap="round" />
       <line x1="172" y1="102" x2="138" y2="88" stroke="#EA580C" strokeWidth="4" strokeLinecap="round" />
-
-      {/* Lift platform */}
       <rect x="58" y="84" width="84" height="7" rx="3.5" fill="#C2410C" />
-      <rect x="60" y="84" width="80" height="4" rx="2"
-            fill="url(#liftGrad)" opacity="0.9" />
-
-      {/* Car body */}
+      <rect x="60" y="84" width="80" height="4" rx="2" fill="url(#liftGrad)" opacity="0.9" />
       <rect x="42" y="50" width="116" height="38" rx="9" fill="#1E2536" stroke="#4B5563" strokeWidth="1.5" />
-
-      {/* Cabin roof */}
       <path d="M74 50 C76 28 124 28 126 50" fill="#131720" stroke="#4B5563" strokeWidth="1.5" strokeLinejoin="round" />
-
-      {/* Windshield */}
       <path d="M80 50 C82 36 100 33 100 50Z" fill="#1D4ED8" opacity="0.35" />
-      {/* Rear window */}
       <path d="M100 50 C100 33 118 36 120 50Z" fill="#1D4ED8" opacity="0.35" />
-
-      {/* Headlight */}
       <rect x="153" y="61" width="9" height="5" rx="2.5" fill="#FCD34D" opacity="0.8" />
       <rect x="153" y="61" width="9" height="5" rx="2.5" fill="url(#headlightGlow)" opacity="0.5" />
-
-      {/* Tail light */}
       <rect x="38" y="61" width="7" height="5" rx="2.5" fill="#EF4444" opacity="0.7" />
-
-      {/* Door line */}
       <line x1="100" y1="52" x2="100" y2="86" stroke="#374151" strokeWidth="1" />
-
-      {/* Wheels */}
       <circle cx="72" cy="88" r="13" fill="#111827" stroke="#4B5563" strokeWidth="2" />
       <circle cx="72" cy="88" r="6" fill="#1E2536" stroke="#374151" strokeWidth="1" />
       <circle cx="128" cy="88" r="13" fill="#111827" stroke="#4B5563" strokeWidth="2" />
       <circle cx="128" cy="88" r="6" fill="#1E2536" stroke="#374151" strokeWidth="1" />
-
-      {/* Wheel spokes */}
       {[0, 60, 120, 180, 240, 300].map((deg) => (
-        <line
-          key={deg}
-          x1={72 + 3 * Math.cos((deg * Math.PI) / 180)}
-          y1={88 + 3 * Math.sin((deg * Math.PI) / 180)}
-          x2={72 + 5.5 * Math.cos((deg * Math.PI) / 180)}
-          y2={88 + 5.5 * Math.sin((deg * Math.PI) / 180)}
+        <line key={deg}
+          x1={72 + 3 * Math.cos((deg * Math.PI) / 180)} y1={88 + 3 * Math.sin((deg * Math.PI) / 180)}
+          x2={72 + 5.5 * Math.cos((deg * Math.PI) / 180)} y2={88 + 5.5 * Math.sin((deg * Math.PI) / 180)}
           stroke="#4B5563" strokeWidth="1" strokeLinecap="round"
         />
       ))}
       {[0, 60, 120, 180, 240, 300].map((deg) => (
-        <line
-          key={deg}
-          x1={128 + 3 * Math.cos((deg * Math.PI) / 180)}
-          y1={88 + 3 * Math.sin((deg * Math.PI) / 180)}
-          x2={128 + 5.5 * Math.cos((deg * Math.PI) / 180)}
-          y2={88 + 5.5 * Math.sin((deg * Math.PI) / 180)}
+        <line key={deg}
+          x1={128 + 3 * Math.cos((deg * Math.PI) / 180)} y1={88 + 3 * Math.sin((deg * Math.PI) / 180)}
+          x2={128 + 5.5 * Math.cos((deg * Math.PI) / 180)} y2={88 + 5.5 * Math.sin((deg * Math.PI) / 180)}
           stroke="#4B5563" strokeWidth="1" strokeLinecap="round"
         />
       ))}
-
-      {/* Brand badge (green checkmark) */}
       <circle cx="160" cy="36" r="14" fill="#14532D" stroke="#166534" strokeWidth="1.5" />
       <circle cx="160" cy="36" r="14" fill="#15803D" opacity="0.6" />
-      <path d="M153 36 L158 41 L167 30"
-            stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-
-      {/* Gradient defs */}
+      <path d="M153 36 L158 41 L167 30" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
       <defs>
         <linearGradient id="liftGrad" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor="#F97316" stopOpacity="0.8" />
