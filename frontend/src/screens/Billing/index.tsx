@@ -33,6 +33,7 @@ const PLANS: PlanDef[] = [
     tier:  "standard",
     features: [
       "1 Usuario",
+      "Presupuesto Digital Interactivo",
       "Diagnóstico con IA por voz",
       "WhatsApp automático (cambios de estado)",
       "Seguimiento QR para clientes",
@@ -48,7 +49,7 @@ const PLANS: PlanDef[] = [
     features: [
       "Todo lo anterior, más:",
       "Hasta 3 Usuarios",
-      "Presupuesto Digital Interactivo",
+      "Personalización de Marca (tu logo en presupuestos)",
       "Recordatorios Automáticos de Service",
     ],
   },
