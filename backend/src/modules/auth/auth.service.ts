@@ -14,9 +14,8 @@ export const authService = {
     const email = dto.email.toLowerCase().trim();
 
     // 1. Buscar usuario por email globalmente (emails son únicos en toda la plataforma)
-    const userResult = await pool.query<AuthUser & { tenant_id: string; is_system_admin: boolean }>(
-      `SELECT u.id, u.email, u.full_name, u.role, u.status, u.password_hash, u.tenant_id,
-              u.is_system_admin
+    const userResult = await pool.query<AuthUser & { tenant_id: string }>(
+      `SELECT u.id, u.email, u.full_name, u.role, u.status, u.password_hash, u.tenant_id
          FROM users u
         WHERE u.email = $1
           AND u.deleted_at IS NULL
@@ -61,13 +60,28 @@ export const authService = {
       [user.id]
     ).catch(() => {});
 
-    // 7. Sign JWT
+    // 7. Resolve is_system_admin — separate query with tenant context (satisfies RLS).
+    //    Wrapped in try/catch so login still works before migration 006 runs.
+    let isSystemAdmin = false;
+    try {
+      await withTenantContext(tenant.id, async (client) => {
+        const { rows: adminRows } = await client.query<{ is_system_admin: boolean }>(
+          `SELECT is_system_admin FROM users WHERE id = $1`,
+          [user.id]
+        );
+        isSystemAdmin = adminRows[0]?.is_system_admin ?? false;
+      });
+    } catch {
+      // Column not yet migrated — safe to ignore, falls back to SUPERADMIN_EMAILS check
+    }
+
+    // 8. Sign JWT
     const payload: Omit<JwtPayload, "iat" | "exp"> = {
-      sub:              user.id,
-      tenant_id:        tenant.id,
-      role:             user.role,
-      email:            user.email,
-      is_system_admin:  user.is_system_admin ?? false,
+      sub:             user.id,
+      tenant_id:       tenant.id,
+      role:            user.role,
+      email:           user.email,
+      is_system_admin: isSystemAdmin,
     };
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -88,7 +102,7 @@ export const authService = {
         tenant_slug:      tenant.slug,
         plan:             tenant.plan,
         sub_status:       tenant.sub_status,
-        is_system_admin:  user.is_system_admin ?? false,
+        is_system_admin:  isSystemAdmin,
       },
     };
   },

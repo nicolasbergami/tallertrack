@@ -1,5 +1,6 @@
 import { env } from "./config/env";
 import { pool } from "./config/database";
+import { runMigrations } from "./config/migrate";
 import app from "./app";
 
 async function bootstrap() {
@@ -13,6 +14,9 @@ async function bootstrap() {
     console.error("❌ Failed to connect to database:", err);
     process.exit(1);
   }
+
+  // Run idempotent schema migrations (uses adminPool / BYPASSRLS)
+  await runMigrations();
 
   const server = app.listen(env.PORT, () => {
     console.log(`🚀 TallerTrack API running on http://localhost:${env.PORT}`);
