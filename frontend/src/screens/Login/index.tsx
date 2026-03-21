@@ -55,7 +55,7 @@ export function Login() {
 
       {/* Logo */}
       <div className="mb-8 text-center">
-        <span className="text-brand font-black text-4xl tracking-tight">TallerTrack</span>
+        <img src="/logo.png" alt="TallerTrack" className="h-20 w-auto mx-auto mb-2" />
         <p className="text-gray-400 text-sm mt-1">Panel de gestión del taller</p>
       </div>
 

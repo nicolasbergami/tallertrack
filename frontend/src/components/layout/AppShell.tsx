@@ -35,10 +35,7 @@ export function AppShell({ children, title, backTo, action, footer }: Props) {
             <IconBack className="w-5 h-5" />
           </button>
         ) : (
-          <span className="font-black text-base tracking-tight select-none">
-            <span className="text-brand">Taller</span>
-            <span className="text-slate-200">Track</span>
-          </span>
+          <img src="/logo.png" alt="TallerTrack" className="h-8 w-auto" />
         )}
 
         <h1 className="flex-1 font-semibold text-sm text-slate-300 truncate">

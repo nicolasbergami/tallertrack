@@ -40,10 +40,7 @@ export function Landing() {
       {/* ── Navbar ── */}
       <header className="sticky top-0 z-50 bg-[#0F172A]/95 backdrop-blur border-b border-slate-800
                          flex items-center justify-between px-5 py-3.5">
-        <span className="font-black text-xl tracking-tight select-none">
-          <span className="text-[#F97316]">Taller</span>
-          <span className="text-slate-100">Track</span>
-        </span>
+        <img src="/logo.png" alt="TallerTrack" className="h-9 w-auto" />
         <div className="flex items-center gap-2">
           <Link to="/login"
             className="text-sm font-semibold text-slate-400 hover:text-white transition-colors px-3 py-2">
