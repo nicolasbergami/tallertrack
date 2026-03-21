@@ -34,8 +34,13 @@ export async function usePostgresAuthState(tenantId: string): Promise<{
     [tenantId]
   );
 
-  const creds = rows[0]
-    ? JSON.parse(JSON.stringify(rows[0].creds), BufferJSON.reviver)
+  const rawCreds = rows[0]?.creds;
+  const hasValidCreds = rawCreds != null &&
+    typeof rawCreds === "object" &&
+    Object.keys(rawCreds as object).length > 0;
+
+  const creds = hasValidCreds
+    ? JSON.parse(JSON.stringify(rawCreds), BufferJSON.reviver)
     : initAuthCreds();
 
   // ── SignalKeyStore backed by whatsapp_session_keys table ──────────────────
