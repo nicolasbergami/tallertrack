@@ -18,7 +18,6 @@ const OTP_TTL_MINUTES   = 10;
 const OTP_MAX_ATTEMPTS  = 5;
 const OTP_MAX_RESENDS   = 3;
 const OTP_RESEND_COOLDOWN_SEC = 60;
-const PENDING_REG_TTL_HOURS   = 24; // after this, same CUIT/WhatsApp can re-register
 const TRIAL_DAYS = 30;
 
 // ---------------------------------------------------------------------------
@@ -115,7 +114,7 @@ export const onboardingService = {
       throw createHttpError(422, "Número de WhatsApp inválido. Usa el formato: +5491112345678");
     }
 
-    // 2. Verificar que CUIT/WhatsApp no estén en uso (incluye cuentas canceladas)
+    // 2. Verificar que CUIT/WhatsApp no estén en uso
     const { rows: existingTenants } = await pool.query(
       `SELECT id FROM tenants WHERE tax_id = $1 OR phone = $2 LIMIT 1`,
       [cuit, whatsapp]
@@ -124,7 +123,7 @@ export const onboardingService = {
       throw createHttpError(409, "El CUIT/CUIL o el número de WhatsApp ya están registrados en otra cuenta.");
     }
 
-    // 3. Verificar email duplicado en tenants activos
+    // 3. Verificar email duplicado
     const email = raw.email.toLowerCase().trim();
     const { rows: existingUsers } = await pool.query(
       `SELECT u.id FROM users u
@@ -137,74 +136,72 @@ export const onboardingService = {
       throw createHttpError(409, "Ya existe una cuenta con ese email.");
     }
 
-    // 4. Verificar registro pendiente activo
-    const { rows: activePending } = await pool.query<{ id: string; email: string }>(
-      `SELECT id, email FROM tenant_registrations
-        WHERE (cuit = $1 OR whatsapp = $2)
-          AND status = 'pending'
-          AND created_at > NOW() - INTERVAL '${PENDING_REG_TTL_HOURS} hours'
-        LIMIT 1`,
-      [cuit, whatsapp]
-    );
-
+    // 4. Crear tenant + usuario propietario en una transacción
     const passwordHash = await bcrypt.hash(raw.password, 12);
-    const otp          = generateOtp();
-    let regId: string;
+    const slug         = await uniqueSlug(slugify(raw.workshop_name.trim()));
 
-    if (activePending.length > 0) {
-      const pending = activePending[0];
-      if (pending.email !== email) {
-        // Distinto email → bloquear (posible abuso)
-        throw createHttpError(409,
-          "Ya existe un registro pendiente con este CUIT o WhatsApp. " +
-          "Revisa tu WhatsApp o espera 24 horas para intentarlo de nuevo."
-        );
-      }
-      // Mismo email → es la misma persona reintentando; reutilizar el registro
-      regId = pending.id;
-      const otpHash = hashOtp(regId, otp);
-      await pool.query(
-        `UPDATE tenant_registrations
-            SET workshop_name = $1, password_hash = $2, otp_hash = $3,
-                otp_expires_at = NOW() + INTERVAL '${OTP_TTL_MINUTES} minutes',
-                otp_attempts = 0, created_at = NOW()
-          WHERE id = $4`,
-        [raw.workshop_name.trim(), passwordHash, otpHash, regId]
-      );
-    } else {
-      // 5. Crear registro pendiente nuevo
-      const { rows: [reg] } = await pool.query<{ id: string }>(
-        `INSERT INTO tenant_registrations
-           (workshop_name, email, password_hash, cuit, whatsapp, otp_hash, otp_expires_at)
-         VALUES ($1, $2, $3, $4, $5, 'placeholder',
-                 NOW() + INTERVAL '${OTP_TTL_MINUTES} minutes')
+    const client = await pool.connect();
+    let tenantId = "";
+    let userId   = "";
+
+    try {
+      await client.query("BEGIN");
+
+      const { rows: [tenant] } = await client.query<{ id: string }>(
+        `INSERT INTO tenants
+           (slug, name, tax_id, phone, country, plan, sub_status,
+            trial_ends_at, max_users, max_vehicles, settings)
+         VALUES ($1, $2, $3, $4, 'AR', 'free', 'trialing',
+                 NOW() + INTERVAL '${TRIAL_DAYS} days',
+                 5, 1000,
+                 '{"timezone":"America/Argentina/Buenos_Aires","currency":"ARS"}')
          RETURNING id`,
-        [raw.workshop_name.trim(), email, passwordHash, cuit, whatsapp]
+        [slug, raw.workshop_name.trim(), cuit, whatsapp]
       );
-      regId = reg.id;
-      const otpHash = hashOtp(regId, otp);
-      await pool.query(
-        `UPDATE tenant_registrations SET otp_hash = $1 WHERE id = $2`,
-        [otpHash, regId]
+      tenantId = tenant.id;
+
+      // SET LOCAL para que el INSERT en users pase el RLS del tenant recién creado
+      await client.query("SELECT set_config('app.current_tenant_id', $1, true)", [tenantId]);
+
+      const { rows: [user] } = await client.query<{ id: string }>(
+        `INSERT INTO users (tenant_id, email, password_hash, full_name, role, status)
+         VALUES ($1, $2, $3, $4, 'owner', 'active')
+         RETURNING id`,
+        [tenantId, email, passwordHash, raw.workshop_name.trim()]
       );
+      userId = user.id;
+
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
     }
 
-    // Alias para el resto del flujo
-    const reg = { id: regId };
+    // 5. Emitir JWT → auto-login inmediato
+    const payload: Omit<JwtPayload, "iat" | "exp"> = {
+      sub:       userId,
+      tenant_id: tenantId,
+      role:      "owner",
+      email,
+    };
 
-    // 6. Enviar OTP por WhatsApp (fire-and-forget — no bloquea el registro)
-    whatsappService.sendMessage({
-      to:   whatsapp,
-      body: `🔐 *TallerTrack* — Tu código de verificación es:\n\n*${otp}*\n\nVálido por ${OTP_TTL_MINUTES} minutos. No lo compartas con nadie.`,
-    }).catch(() => {
-      // Loguea en consola pero no falla el registro
-      console.error(`[Onboarding] No se pudo enviar OTP a ${maskPhone(whatsapp)}`);
-    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const token = jwt.sign(payload, env.JWT_SECRET, { expiresIn: env.JWT_EXPIRES_IN as any });
 
     return {
-      registration_id: reg.id,
-      whatsapp_hint:   maskPhone(whatsapp),
-      expires_in_min:  OTP_TTL_MINUTES,
+      token,
+      expires_in: env.JWT_EXPIRES_IN,
+      user: {
+        id:          userId,
+        email,
+        full_name:   raw.workshop_name.trim(),
+        role:        "owner",
+        tenant_id:   tenantId,
+        tenant_name: raw.workshop_name.trim(),
+        tenant_slug: slug,
+      },
     };
   },
 

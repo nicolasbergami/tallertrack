@@ -1,17 +1,22 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { api } from "../../api/client";
+import { useAuthStore } from "../../store/auth.store";
 
 interface RegisterResponse {
-  registration_id: string;
-  whatsapp_hint:   string;
-  expires_in_min:  number;
+  token:      string;
+  expires_in: string;
+  user: {
+    id: string; email: string; full_name: string; role: string;
+    tenant_id: string; tenant_name: string; tenant_slug: string;
+  };
 }
 
 interface FieldError { [key: string]: string }
 
 export function Register() {
   const navigate = useNavigate();
+  const setAuth  = useAuthStore(s => s.setAuth);
 
   const [form, setForm] = useState({
     workshop_name: "",
@@ -67,11 +72,16 @@ export function Register() {
         whatsapp:      form.whatsapp.trim(),
         cuit:          form.cuit.trim(),
       });
-      navigate("/verify", { state: {
-        registration_id: res.registration_id,
-        whatsapp_hint:   res.whatsapp_hint,
-        expires_in_min:  res.expires_in_min,
-      }});
+      setAuth(res.token, {
+        id:         res.user.id,
+        email:      res.user.email,
+        name:       res.user.full_name,
+        role:       res.user.role as "owner",
+        tenantId:   res.user.tenant_id,
+        tenantName: res.user.tenant_name,
+        tenantSlug: res.user.tenant_slug,
+      });
+      navigate("/dashboard", { replace: true });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Error al registrarse";
       setApiError(msg);
@@ -125,9 +135,6 @@ export function Register() {
               placeholder="+5491112345678"
               className={inputClass(errors.whatsapp)}
             />
-            <p className="text-xs text-slate-500 mt-1">
-              Recibirás un código para verificar este número.
-            </p>
           </Field>
 
           <Field label="Email" error={errors.email}>
@@ -159,7 +166,7 @@ export function Register() {
             type="submit" disabled={loading}
             className="w-full h-12 bg-blue-600 hover:bg-blue-500 disabled:opacity-60 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition-colors mt-2"
           >
-            {loading ? "Enviando código…" : "Crear cuenta →"}
+            {loading ? "Creando cuenta…" : "Crear cuenta →"}
           </button>
 
           <p className="text-center text-slate-500 text-sm pt-1">

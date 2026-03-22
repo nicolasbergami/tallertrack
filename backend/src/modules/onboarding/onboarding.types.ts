@@ -31,9 +31,17 @@ export interface PendingRegistration {
 }
 
 export interface RegisterResponse {
-  registration_id: string;
-  whatsapp_hint:   string; // e.g. "+549****5678"
-  expires_in_min:  number;
+  token:       string;
+  expires_in:  string;
+  user: {
+    id:          string;
+    email:       string;
+    full_name:   string;
+    role:        string;
+    tenant_id:   string;
+    tenant_name: string;
+    tenant_slug: string;
+  };
 }
 
 export interface VerifyResponse {
