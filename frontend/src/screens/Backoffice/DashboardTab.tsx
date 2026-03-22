@@ -126,7 +126,7 @@ function PlansManager() {
               <div className="flex gap-2">
                 <input
                   type="number" value={draft} onChange={e => setDraft(e.target.value)}
-                  className="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-2 py-1 text-white text-sm w-0"
+                  className="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-2 py-1 text-white text-[16px] md:text-sm w-0"
                 />
                 <button
                   onClick={() => saveMutation.mutate({ slug: plan.id, price_ars: Number(draft) })}

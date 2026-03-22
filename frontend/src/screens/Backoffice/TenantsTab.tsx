@@ -246,7 +246,7 @@ function PlanModal({ tenant, onClose, onToast }: {
     onError: () => onToast("Error al actualizar el plan. Intentá de nuevo.", "error"),
   });
 
-  const inputCls = "h-10 px-3 rounded-xl border border-white/10 text-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand w-full";
+  const inputCls = "h-10 px-3 rounded-xl border border-white/10 text-slate-200 text-[16px] md:text-sm focus:outline-none focus:ring-2 focus:ring-brand w-full";
 
   return (
     <div
