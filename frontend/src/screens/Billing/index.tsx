@@ -400,6 +400,16 @@ export function Billing() {
     refetchInterval: justPaid ? 3_000 : false,
   });
 
+  const { data: apiPlans } = useQuery<{ id: string; price: number }[]>({
+    queryKey: ["billing-plans"],
+    queryFn:  () => api.get<{ id: string; price: number }[]>("/billing/plans"),
+  });
+
+  const plansWithPrices = PLANS.map(plan => ({
+    ...plan,
+    price: apiPlans?.find(p => p.id === plan.id)?.price ?? plan.price,
+  }));
+
   const subscribeMutation = useMutation({
     mutationFn: (plan: string) =>
       api.post<{ init_point: string }>("/billing/subscribe", { plan }),
@@ -464,7 +474,7 @@ export function Billing() {
           ) : (
             /* sm:py-4 gives room for the popular card's scale-[1.04] overflow */
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:items-start sm:py-4">
-              {PLANS.map((plan) => (
+              {plansWithPrices.map((plan) => (
                 <PlanCard
                   key={plan.id}
                   plan={plan}

@@ -29,6 +29,24 @@ export async function runMigrations(): Promise<void> {
         WHERE whatsapp_number IS NOT NULL
     `);
 
+    // 008 — Subscription plans table with dynamic pricing
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS subscription_plans (
+        slug       TEXT PRIMARY KEY,
+        name       TEXT NOT NULL,
+        price_ars  NUMERIC(12,2) NOT NULL,
+        is_active  BOOLEAN NOT NULL DEFAULT TRUE,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      INSERT INTO subscription_plans (slug, name, price_ars) VALUES
+        ('starter',      'Básico',      18000),
+        ('professional', 'Profesional', 35000),
+        ('enterprise',   'Red',         80000)
+      ON CONFLICT (slug) DO NOTHING
+    `);
+
     console.log("✅ Migrations applied.");
   } catch (err) {
     // Non-fatal in dev if adminPool lacks DDL rights — warn and continue

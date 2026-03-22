@@ -1,4 +1,6 @@
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { api } from "../../api/client";
 import { backofficeApi, type BackofficeDashboard } from "../../api/backoffice.api";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -87,6 +89,74 @@ function PlanBar({ data }: { data: BackofficeDashboard }) {
   );
 }
 
+// ── Plans Manager ─────────────────────────────────────────────────────────────
+
+const PLAN_LABELS: Record<string, string> = {
+  starter: "Básico", professional: "Profesional", enterprise: "Red",
+};
+
+function PlansManager() {
+  const queryClient = useQueryClient();
+  const { data: plans } = useQuery<{ id: string; price: number }[]>({
+    queryKey: ["billing-plans"],
+    queryFn:  () => api.get("/billing/plans"),
+  });
+  const [editing, setEditing] = useState<string | null>(null);
+  const [draft,   setDraft]   = useState("");
+
+  const saveMutation = useMutation({
+    mutationFn: ({ slug, price_ars }: { slug: string; price_ars: number }) =>
+      backofficeApi.updatePlanPrice(slug, price_ars),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["billing-plans"] });
+      setEditing(null);
+    },
+  });
+
+  return (
+    <div className="bg-[#111827] border border-white/5 rounded-2xl p-5">
+      <p className="text-slate-500 text-xs font-semibold uppercase tracking-wider mb-4">
+        Precios de Planes (ARS/mes)
+      </p>
+      <div className="grid grid-cols-3 gap-3">
+        {(plans ?? []).map(plan => (
+          <div key={plan.id} className="bg-slate-800/50 rounded-xl p-4 flex flex-col gap-2">
+            <p className="text-slate-400 text-xs font-semibold">{PLAN_LABELS[plan.id] ?? plan.id}</p>
+            {editing === plan.id ? (
+              <div className="flex gap-2">
+                <input
+                  type="number" value={draft} onChange={e => setDraft(e.target.value)}
+                  className="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-2 py-1 text-white text-sm w-0"
+                />
+                <button
+                  onClick={() => saveMutation.mutate({ slug: plan.id, price_ars: Number(draft) })}
+                  disabled={saveMutation.isPending}
+                  className="px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white text-xs rounded-lg disabled:opacity-50"
+                >
+                  {saveMutation.isPending ? "…" : "OK"}
+                </button>
+                <button onClick={() => setEditing(null)}
+                  className="px-2 py-1 text-slate-400 text-xs hover:text-white"
+                >✕</button>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between">
+                <p className="text-white font-black text-lg">
+                  ${plan.price.toLocaleString("es-AR")}
+                </p>
+                <button
+                  onClick={() => { setEditing(plan.id); setDraft(String(plan.price)); }}
+                  className="text-slate-500 hover:text-slate-300 text-xs"
+                >Editar</button>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── Main ─────────────────────────────────────────────────────────────────────
 
 export function DashboardTab() {
@@ -165,6 +235,9 @@ export function DashboardTab() {
           accent="text-slate-400"
         />
       </div>
+
+      {/* Plan price management */}
+      <PlansManager />
     </div>
   );
 }

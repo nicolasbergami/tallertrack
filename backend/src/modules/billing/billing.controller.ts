@@ -1,7 +1,8 @@
 import { Request, Response } from "express";
 import { z } from "zod";
+import { pool } from "../../config/database";
 import { billingService } from "./billing.service";
-import { BillingPlan, PLANS, MpWebhookBody } from "./billing.types";
+import { BillingPlan, MpWebhookBody } from "./billing.types";
 
 const subscribeDtoSchema = z.object({
   plan: z.enum(["starter", "professional", "enterprise"]),
@@ -15,8 +16,11 @@ export const billingController = {
   },
 
   // ── GET /api/v1/billing/plans ──────────────────────────────────────────
-  getPlans(_req: Request, res: Response): void {
-    res.json(Object.values(PLANS));
+  async getPlans(_req: Request, res: Response): Promise<void> {
+    const { rows } = await pool.query(
+      `SELECT slug AS id, price_ars AS price FROM subscription_plans WHERE is_active = TRUE ORDER BY price_ars`
+    );
+    res.json(rows.map(r => ({ id: r.id, price: Number(r.price) })));
   },
 
   // ── POST /api/v1/billing/subscribe ────────────────────────────────────

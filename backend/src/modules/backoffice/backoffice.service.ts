@@ -1,4 +1,5 @@
 import { withAdminContext } from "../../config/database";
+import { createHttpError } from "../../middleware/error.middleware";
 import type {
   BackofficeDashboard,
   BackofficeTenant,
@@ -6,12 +7,6 @@ import type {
   RecentActivity,
 } from "./backoffice.types";
 
-// Plan prices in ARS — used to compute estimated MRR
-const PLAN_PRICE: Record<string, number> = {
-  starter:      18_000,
-  professional: 35_000,
-  enterprise:   80_000,
-};
 
 export const backofficeService = {
 
@@ -50,17 +45,18 @@ export const backofficeService = {
         WHERE  deleted_at IS NULL
       `);
 
-      // MRR: active (non-trial) subscriptions only
-      const { rows: mrrRows } = await client.query<{ plan: string; cnt: string }>(`
-        SELECT plan, COUNT(*) AS cnt
-        FROM   tenants
-        WHERE  sub_status = 'active'
-          AND  deleted_at IS NULL
-        GROUP  BY plan
+      // MRR: active (non-trial) subscriptions — price from subscription_plans table
+      const { rows: mrrRows } = await client.query<{ price_ars: string; cnt: string }>(`
+        SELECT sp.price_ars, COUNT(t.id) AS cnt
+        FROM   tenants t
+        JOIN   subscription_plans sp ON sp.slug = t.plan::text
+        WHERE  t.sub_status = 'active'
+          AND  t.deleted_at IS NULL
+        GROUP  BY sp.price_ars
       `);
 
       const mrr = mrrRows.reduce(
-        (sum, row) => sum + (PLAN_PRICE[row.plan] ?? 0) * Number(row.cnt),
+        (sum, row) => sum + Number(row.price_ars) * Number(row.cnt),
         0,
       );
 
@@ -144,6 +140,20 @@ export const backofficeService = {
         LIMIT  100
       `, [days]);
       return rows;
+    });
+  },
+
+  // ── Plan / status override ────────────────────────────────────────────────
+
+  // ── Subscription plan price update ───────────────────────────────────────
+
+  async updatePlanPrice(slug: string, priceArs: number): Promise<void> {
+    await withAdminContext(async (client) => {
+      const { rowCount } = await client.query(
+        `UPDATE subscription_plans SET price_ars = $1, updated_at = NOW() WHERE slug = $2`,
+        [priceArs, slug]
+      );
+      if (!rowCount) throw createHttpError(404, "Plan no encontrado.");
     });
   },
 

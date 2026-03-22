@@ -74,6 +74,9 @@ export const backofficeApi = {
   getActivity: (days = 30) =>
     api.get<{ activity: RecentActivity[] }>(`/backoffice/activity?days=${days}`),
 
+  updatePlanPrice: (slug: string, price_ars: number) =>
+    api.patch<{ success: boolean }>(`/backoffice/plans/${slug}`, { price_ars }),
+
   updateTenantPlan: (
     id:                     string,
     plan:                   string,

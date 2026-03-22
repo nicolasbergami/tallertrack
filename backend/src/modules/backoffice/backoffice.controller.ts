@@ -2,6 +2,10 @@ import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { backofficeService } from "./backoffice.service";
 
+const UpdatePlanPriceSchema = z.object({
+  price_ars: z.number().int().min(1),
+});
+
 const UpdatePlanSchema = z.object({
   plan:                   z.enum(["free", "starter", "professional", "enterprise"]),
   sub_status:             z.enum(["active", "trialing", "inactive", "cancelled", "past_due"]),
@@ -46,6 +50,16 @@ export const backofficeController = {
     } catch (err) {
       next(err);
     }
+  },
+
+  // PATCH /api/v1/backoffice/plans/:slug
+  async updatePlanPrice(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { slug } = req.params;
+      const { price_ars } = UpdatePlanPriceSchema.parse(req.body);
+      await backofficeService.updatePlanPrice(slug, price_ars);
+      res.json({ success: true, slug, price_ars });
+    } catch (err) { next(err); }
   },
 
   // PATCH /api/v1/backoffice/tenants/:id/plan

@@ -162,8 +162,14 @@ export const billingService = {
     payerEmail: string,
     plan:       BillingPlan
   ): Promise<CreateSubscriptionResponse> {
-    const cfg = PLANS[plan];
     const backUrl = `${env.BASE_URL}/billing?success=1`;
+
+    const { rows: priceRows } = await pool.query(
+      `SELECT price_ars FROM subscription_plans WHERE slug = $1 AND is_active = TRUE`,
+      [plan]
+    );
+    if (!priceRows[0]) throw createHttpError(404, "Plan no disponible.");
+    const price = Number(priceRows[0].price_ars);
 
     const preapproval = await mpPost<MpPreapproval>("/preapproval", {
       reason:             planReason(plan),
@@ -172,8 +178,8 @@ export const billingService = {
       auto_recurring: {
         frequency:          1,
         frequency_type:     "months",
-        transaction_amount: cfg.price,
-        currency_id:        cfg.currency,
+        transaction_amount: price,
+        currency_id:        "ARS",
       },
       back_url: backUrl,
       status:   "pending",

@@ -12,5 +12,6 @@ router.get("/dashboard",          backofficeController.getDashboard);
 router.get("/tenants",            backofficeController.getTenants);
 router.get("/activity",           backofficeController.getActivity);
 router.patch("/tenants/:id/plan", backofficeController.updateTenantPlan);
+router.patch("/plans/:slug",      backofficeController.updatePlanPrice);
 
 export default router;
