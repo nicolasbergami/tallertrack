@@ -75,19 +75,27 @@ export const whatsappController = {
       res.end();
     };
 
+    const onAbuseDetected = (data: { phone: string; message: string }) => {
+      send({ type: "abuse_detected", phone: data.phone, message: data.message });
+      cleanup();
+      res.end();
+    };
+
     function cleanup() {
       clearTimeout(timeout);
       clearInterval(heartbeat);
-      qrEmitter.off("qr",           onQR);
-      qrEmitter.off("connected",    onConnected);
-      qrEmitter.off("disconnected", onDisconnected);
-      qrEmitter.off("error",        onError);
+      qrEmitter.off("qr",             onQR);
+      qrEmitter.off("connected",      onConnected);
+      qrEmitter.off("disconnected",   onDisconnected);
+      qrEmitter.off("error",          onError);
+      qrEmitter.off("abuse_detected", onAbuseDetected);
     }
 
-    qrEmitter.on("qr",           onQR);
-    qrEmitter.on("connected",    onConnected);
-    qrEmitter.on("disconnected", onDisconnected);
-    qrEmitter.on("error",        onError);
+    qrEmitter.on("qr",             onQR);
+    qrEmitter.on("connected",      onConnected);
+    qrEmitter.on("disconnected",   onDisconnected);
+    qrEmitter.on("error",          onError);
+    qrEmitter.on("abuse_detected", onAbuseDetected);
 
     // Heartbeat every 10 s: keeps the connection alive through Railway's
     // idle-connection timeout and forces proxy buffers to flush

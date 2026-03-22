@@ -3,6 +3,7 @@ import { Boom } from "@hapi/boom";
 import { pool } from "../../config/database";
 import { usePostgresAuthState } from "./db-auth-state";
 import { loadBaileys, getBaileysVersion } from "./baileys-loader";
+import { checkTrialAbuse, burnPhoneToTenant, revokeTrialForAbuse } from "./trial-abuse-guard";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -200,7 +201,63 @@ export const sessionManager = {
       if (connection === "open") {
         clearTimeout(noResponseTimeout);
         session.status = "connected";
+        // Baileys format: "5491123456789:0@s.whatsapp.net" → take everything before ":"
         session.phone  = socket.user?.id?.split(":")[0] ?? undefined;
+
+        // ── Trial Abuse Guard ──────────────────────────────────────────────
+        if (session.phone) {
+          try {
+            const abuse = await checkTrialAbuse(tenantId, session.phone);
+
+            if (abuse.phoneAlreadyUsed && abuse.currentTenantIsTrialing) {
+              console.warn(
+                `[WhatsApp] TRIAL ABUSE — tenant ${tenantId} tried to reuse ` +
+                `number ${session.phone} (already owned by tenant ${abuse.conflictingTenantId})`
+              );
+
+              // a) Kill the session immediately
+              session.status = "disconnected";
+              sessions.delete(tenantId);
+              try { await socket.logout(); } catch { /* ignore logout errors */ }
+              await pool.query(
+                `UPDATE whatsapp_sessions
+                    SET status = 'disconnected', creds = '{}'::jsonb, updated_at = NOW()
+                  WHERE tenant_id = $1`,
+                [tenantId]
+              );
+              await pool.query(
+                `DELETE FROM whatsapp_session_keys WHERE tenant_id = $1`,
+                [tenantId]
+              );
+
+              // b) Revoke the trial
+              await revokeTrialForAbuse(tenantId).catch((err) =>
+                console.error(`[WhatsApp] Failed to revoke trial for ${tenantId}:`, err)
+              );
+
+              // c) Notify the SSE stream so the frontend can show an alert
+              qrEmitter.emit("abuse_detected", {
+                phone:   session.phone,
+                message:
+                  "Este número de WhatsApp ya fue utilizado en otra cuenta de prueba. " +
+                  "Debés mejorar tu plan para conectarlo.",
+              });
+
+              return; // Stop — do NOT proceed with the normal connection flow
+            }
+          } catch (abuseErr) {
+            // A guard failure must NEVER block a legitimate connection — log and continue.
+            console.error(`[WhatsApp] Abuse check failed for tenant ${tenantId}:`, abuseErr);
+          }
+        }
+        // ── End Trial Abuse Guard ──────────────────────────────────────────
+
+        // Burn the number so future trial accounts with the same phone are blocked.
+        if (session.phone) {
+          await burnPhoneToTenant(tenantId, session.phone).catch((err) =>
+            console.error(`[WhatsApp] Failed to burn phone for tenant ${tenantId}:`, err)
+          );
+        }
 
         await pool.query(
           `INSERT INTO whatsapp_sessions (tenant_id, creds, status, phone)
