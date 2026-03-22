@@ -18,6 +18,17 @@ export async function runMigrations(): Promise<void> {
         WHERE is_system_admin = TRUE
     `);
 
+    // 007 — Trial Abuse Guard: burned WhatsApp number registry
+    await client.query(`
+      ALTER TABLE tenants
+        ADD COLUMN IF NOT EXISTS whatsapp_number TEXT
+    `);
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_tenants_whatsapp_number
+        ON tenants (whatsapp_number)
+        WHERE whatsapp_number IS NOT NULL
+    `);
+
     console.log("✅ Migrations applied.");
   } catch (err) {
     // Non-fatal in dev if adminPool lacks DDL rights — warn and continue

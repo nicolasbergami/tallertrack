@@ -259,6 +259,9 @@ function QRModal({ onClose, onConnected }: { onClose: () => void; onConnected: (
               } else if (payload.type === "disconnected" || payload.type === "error") {
                 clearTimeout(safetyTimer);
                 setError(payload.reason ?? payload.message ?? "Desconectado");
+              } else if (payload.type === "abuse_detected") {
+                clearTimeout(safetyTimer);
+                setError(payload.message ?? "Este número ya fue utilizado en otra cuenta de prueba.");
               }
             } catch { /* ignore malformed SSE line */ }
           }
