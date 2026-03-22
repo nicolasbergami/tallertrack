@@ -103,7 +103,7 @@ export function History() {
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Patente, cliente, mecánico, OT…"
                 className="w-full h-10 bg-surface-card border border-surface-border rounded-xl
-                           pl-10 pr-9 text-sm text-slate-100 placeholder-slate-500
+                           pl-10 pr-9 text-[16px] md:text-sm text-slate-100 placeholder-slate-500
                            focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent
                            transition-colors"
               />
@@ -142,7 +142,7 @@ export function History() {
           <>
             {/* Stats strip */}
             {allOrders.length > 0 && (
-              <div className="grid grid-cols-4 border-b border-surface-border">
+              <div className="grid grid-cols-4 border-b border-surface-border divide-x divide-surface-border">
                 <StatTile
                   value={stats.total}
                   label="Total"
@@ -258,7 +258,7 @@ function StatTile({
     <button
       onClick={onClick}
       className={`flex flex-col items-center justify-center py-3.5 px-1 gap-0.5
-                  border-r border-surface-border last:border-r-0 transition-colors select-none
+                  transition-colors select-none
                   ${active ? "bg-surface-raised/60" : "hover:bg-surface-raised/30"}
                   active:scale-[0.97]`}
     >
@@ -395,37 +395,35 @@ function OrderRow({
   return (
     <button
       onClick={onPress}
-      className="w-full text-left flex items-center gap-2.5 px-3 py-2.5
+      className="w-full text-left flex flex-col gap-1 px-3 py-3
                  hover:bg-surface-raised transition-colors active:scale-[0.99]"
     >
-      {/* Status color dot */}
-      <span className={`w-2 h-2 rounded-full flex-shrink-0 ${cfg.dotColor} ${isLive ? "animate-pulse" : ""}`} />
+      {/* Línea 1: OT number (izq) + fecha (der) */}
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${cfg.dotColor} ${isLive ? "animate-pulse" : ""}`} />
+          <span className="font-mono text-[11px] text-slate-500 truncate">
+            <Highlight text={order.order_number ?? ""} query={search} />
+          </span>
+        </div>
+        <span className="text-[11px] text-slate-500 flex-shrink-0">{dayLabel}</span>
+      </div>
 
-      {/* OT number */}
-      <span className="font-mono text-[11px] text-slate-500 flex-shrink-0 w-28 truncate">
-        <Highlight text={order.order_number ?? ""} query={search} />
-      </span>
-
-      {/* Mechanic */}
-      {order.assigned_user_name && (
-        <span className="text-[11px] text-slate-500 flex-shrink-0 truncate max-w-[4rem]">
-          <Highlight text={order.assigned_user_name.split(" ")[0]} query={search} />
+      {/* Línea 2: mecánico (izq) + badges (der) */}
+      <div className="flex items-center justify-between gap-2 pl-4">
+        <span className="text-[11px] text-slate-600 truncate flex-1">
+          {order.assigned_user_name
+            ? <Highlight text={order.assigned_user_name.split(" ")[0]} query={search} />
+            : ""}
         </span>
-      )}
-
-      <div className="flex-1" />
-
-      {/* Payment badge */}
-      <PaymentBadge status={order.payment_status} />
-
-      {/* Status badge */}
-      <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full border flex-shrink-0
-                        text-[10px] font-bold ${cfg.bgColor} ${cfg.textColor} ${cfg.borderColor}`}>
-        {cfg.shortLabel}
-      </span>
-
-      {/* Date */}
-      <span className="text-[10px] text-slate-600 flex-shrink-0 w-10 text-right">{dayLabel}</span>
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          <PaymentBadge status={order.payment_status} />
+          <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full border
+                            text-[10px] font-bold ${cfg.bgColor} ${cfg.textColor} ${cfg.borderColor}`}>
+            {cfg.shortLabel}
+          </span>
+        </div>
+      </div>
     </button>
   );
 }
