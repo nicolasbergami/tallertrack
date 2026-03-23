@@ -13,7 +13,7 @@ const envSchema = z.object({
   JWT_EXPIRES_IN: z.string().default("8h"),
 
   // Frontend base URL — used for tracking links sent via WhatsApp and QR codes
-  TRACKING_BASE_URL: z.string().url().default("https://tallertrack-eta.vercel.app"),
+  TRACKING_BASE_URL: z.string().url().default("https://tallertrack.com.ar"),
 
   WHATSAPP_PROVIDER: z.enum(["mock", "meta", "twilio"]).default("mock"),
   WHATSAPP_API_URL: z.string().optional(),
