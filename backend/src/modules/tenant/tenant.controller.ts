@@ -1,16 +1,7 @@
 import { Request, Response, NextFunction } from "express";
-import { z } from "zod";
 import { pool } from "../../config/database";
+import { cloudinary } from "../../config/cloudinary";
 import { createHttpError } from "../../middleware/error.middleware";
-
-// Note: plan guard is enforced by requirePlan("professional") middleware in tenant.routes.ts
-const UpdateLogoSchema = z.object({
-  logo_url: z
-    .string()
-    .url("La URL del logo no es válida.")
-    .max(2048, "La URL es demasiado larga.")
-    .nullable(),
-});
 
 export const tenantController = {
 
@@ -28,12 +19,31 @@ export const tenantController = {
     }
   },
 
-  // PATCH /api/v1/tenant/settings/logo
+  // PATCH /api/v1/tenant/settings/logo  (multipart/form-data, campo "logo")
   async updateLogo(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { logo_url } = UpdateLogoSchema.parse(req.body);
+      if (!req.file) throw createHttpError(400, "No se recibió ningún archivo.");
 
-      // Plan guard is handled upstream by requirePlan("professional") middleware
+      // Upload buffer to Cloudinary
+      const uploadResult = await new Promise<{ secure_url: string }>((resolve, reject) => {
+        const stream = cloudinary.uploader.upload_stream(
+          {
+            folder:         "tallertrack/logos",
+            public_id:      `tenant_${req.user.tenant_id}`,
+            overwrite:      true,
+            resource_type:  "image",
+            transformation: [{ width: 400, height: 400, crop: "limit" }],
+          },
+          (error, result) => {
+            if (error || !result) return reject(error ?? new Error("Cloudinary upload failed"));
+            resolve(result as { secure_url: string });
+          }
+        );
+        stream.end(req.file!.buffer);
+      });
+
+      const logo_url = uploadResult.secure_url;
+
       await pool.query(
         `UPDATE tenants
             SET settings   = jsonb_set(settings, '{logo_url}', $1::jsonb, true),

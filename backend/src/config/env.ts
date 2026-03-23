@@ -21,6 +21,11 @@ const envSchema = z.object({
   WHATSAPP_ACCESS_TOKEN: z.string().optional(),
   WHATSAPP_TEMPLATE_NAMESPACE: z.string().optional(),
 
+  // Image storage — Cloudinary (logo uploads for Pro+ tenants)
+  CLOUDINARY_CLOUD_NAME: z.string().optional().default(""),
+  CLOUDINARY_API_KEY:    z.string().optional().default(""),
+  CLOUDINARY_API_SECRET: z.string().optional().default(""),
+
   // AI features (Anthropic Claude)
   ANTHROPIC_API_KEY: z.string().optional().default(""),
 
