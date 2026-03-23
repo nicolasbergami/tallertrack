@@ -30,6 +30,9 @@ RUN npm ci --omit=dev
 # Código compilado del stage anterior
 COPY --from=builder /app/dist ./dist
 
+# Archivos SQL de migraciones (necesarios en runtime por migrate.js)
+COPY --from=builder /app/database ./database
+
 # Usuario sin privilegios (buena práctica de seguridad en contenedores)
 RUN groupadd -r appuser && useradd -r -g appuser appuser \
     && chown -R appuser:appuser /app
