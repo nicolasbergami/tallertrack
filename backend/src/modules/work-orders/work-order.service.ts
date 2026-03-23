@@ -624,11 +624,10 @@ export const workOrderService = {
     const phone = normalizeArgentinePhone(workOrder.client_phone);
     const { slug: tenantSlug, name: workshopName } = await getTenantInfo(tenantId);
 
-    const baseUrl    = env.TRACKING_BASE_URL;
-    const orderEnc   = encodeURIComponent(workOrder.order_number);
-    const approveUrl = `${baseUrl}/api/orders/${tenantSlug}/${orderEnc}/approve`;
-    const rejectUrl  = `${baseUrl}/api/orders/${tenantSlug}/${orderEnc}/reject`;
-    const trackingUrl = `${baseUrl}/track/${tenantSlug}/${orderEnc}`;
+    const orderEnc    = encodeURIComponent(workOrder.order_number);
+    const approveUrl  = `${env.BASE_URL}/api/orders/${tenantSlug}/${orderEnc}/approve`;
+    const rejectUrl   = `${env.BASE_URL}/api/orders/${tenantSlug}/${orderEnc}/reject`;
+    const trackingUrl = `${env.TRACKING_BASE_URL}/track/${tenantSlug}/${orderEnc}`;
 
     const message = buildMessage("awaiting_approval", phone, {
       clientName:    workOrder.client_name,

@@ -4,6 +4,7 @@ import { z } from "zod";
 const envSchema = z.object({
   PORT: z.coerce.number().default(3000),
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
+  // Backend base URL — used for API links (approve/reject) sent via WhatsApp
   BASE_URL: z.string().url().default("http://localhost:3000"),
 
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
@@ -11,7 +12,8 @@ const envSchema = z.object({
   JWT_SECRET: z.string().min(32, "JWT_SECRET must be at least 32 characters"),
   JWT_EXPIRES_IN: z.string().default("8h"),
 
-  TRACKING_BASE_URL: z.string().url().default("https://tallertrack-production.up.railway.app"),
+  // Frontend base URL — used for tracking links sent via WhatsApp and QR codes
+  TRACKING_BASE_URL: z.string().url().default("https://tallertrack-eta.vercel.app"),
 
   WHATSAPP_PROVIDER: z.enum(["mock", "meta", "twilio"]).default("mock"),
   WHATSAPP_API_URL: z.string().optional(),
