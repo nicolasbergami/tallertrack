@@ -40,11 +40,14 @@ export function generateRemitoPdf(
   order:  WorkOrderDetail,
   quote:  QuoteWithItems | null,
   tenant: TenantInfo
-): Buffer {
+): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
   const chunks: Buffer[] = [];
   const doc = new PDFDocument({ size: "A4", margin: MARGIN, bufferPages: true });
 
-  doc.on("data", (c: Buffer) => chunks.push(c));
+  doc.on("data",  (c: Buffer) => chunks.push(c));
+  doc.on("end",   () => resolve(Buffer.concat(chunks)));
+  doc.on("error", reject);
 
   // ── Background ────────────────────────────────────────────────────────
   doc.rect(0, 0, PAGE_W, 841.89).fill(C.bg);
@@ -241,6 +244,5 @@ export function generateRemitoPdf(
      );
 
   doc.end();
-
-  return Buffer.concat(chunks);
+  }); // end Promise
 }

@@ -96,7 +96,7 @@ export const workOrderController = {
   // GET /work-orders/:id
   async getById(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const workOrder = await workOrderService.getById(req.user.tenant_id, req.params.id);
+      const workOrder = await workOrderService.getSummary(req.user.tenant_id, req.params.id);
       res.json(workOrder);
     } catch (err) {
       next(err);
