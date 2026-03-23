@@ -10,6 +10,12 @@ export const tenantApi = {
   getSettings: () =>
     api.get<{ settings: TenantSettings }>("/tenant/settings"),
 
-  updateLogo: (logo_url: string | null) =>
-    api.patch<{ logo_url: string | null }>("/tenant/settings/logo", { logo_url }),
+  uploadLogo: (file: File) => {
+    const form = new FormData();
+    form.append("logo", file);
+    return api.patchForm<{ logo_url: string }>("/tenant/settings/logo", form);
+  },
+
+  removeLogo: () =>
+    api.delete<{ logo_url: null }>("/tenant/settings/logo"),
 };

@@ -58,7 +58,8 @@ export const api = {
   patch:    <T>(path: string, body: unknown) => request<T>(path, { method: "PATCH", body: JSON.stringify(body) }),
   delete:   <T>(path: string)                => request<T>(path, { method: "DELETE" }),
   /** Multipart upload — does NOT set Content-Type so the browser adds the boundary */
-  postForm: <T>(path: string, form: FormData) => request<T>(path, { method: "POST", body: form }),
+  postForm:  <T>(path: string, form: FormData) => request<T>(path, { method: "POST",  body: form }),
+  patchForm: <T>(path: string, form: FormData) => request<T>(path, { method: "PATCH", body: form }),
   getBlob: async (path: string): Promise<Blob>  => {
     const token = useAuthStore.getState().token;
     const r = await fetch(`${BASE_URL}${path}`, {

@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AppShell } from "../../components/layout/AppShell";
 import { useAuthStore } from "../../store/auth.store";
 import { IconLogout, IconChevronRight, IconTeam } from "../../components/ui/Icons";
@@ -183,10 +183,13 @@ export function Profile() {
 // ---------------------------------------------------------------------------
 
 function LogoBrandingSection() {
-  const { canAccess } = useSubscription();
-  const hasAccess     = canAccess("brand_logo");
-  const [urlInput, setUrlInput] = useState("");
-  const [paywallOpen, setPaywallOpen] = useState(false);
+  const { canAccess }   = useSubscription();
+  const hasAccess       = canAccess("brand_logo");
+  const queryClient     = useQueryClient();
+  const fileInputRef    = useRef<HTMLInputElement>(null);
+  const [preview, setPreview]     = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [paywallOpen, setPaywallOpen]   = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ["tenant-settings"],
@@ -196,19 +199,35 @@ function LogoBrandingSection() {
 
   const currentLogoUrl = data?.settings?.logo_url ?? null;
 
-  // Pre-fill input once data loads
-  const [synced, setSynced] = useState(false);
-  if (!synced && currentLogoUrl && !urlInput) {
-    setUrlInput(currentLogoUrl);
-    setSynced(true);
-  }
-
-  const mutation = useMutation({
-    mutationFn: () => tenantApi.updateLogo(urlInput.trim() || null),
+  const uploadMutation = useMutation({
+    mutationFn: () => tenantApi.uploadLogo(selectedFile!),
     onSuccess: () => {
-      setSynced(false); // refetch will re-sync
+      queryClient.invalidateQueries({ queryKey: ["tenant-settings"] });
+      setSelectedFile(null);
+      setPreview(null);
     },
   });
+
+  const removeMutation = useMutation({
+    mutationFn: () => tenantApi.removeLogo(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tenant-settings"] });
+      setSelectedFile(null);
+      setPreview(null);
+    },
+  });
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setSelectedFile(file);
+    setPreview(URL.createObjectURL(file));
+    // reset input so same file can be re-selected
+    e.target.value = "";
+  }
+
+  const isPending  = uploadMutation.isPending || removeMutation.isPending;
+  const displayUrl = preview ?? currentLogoUrl;
 
   return (
     <section>
@@ -234,72 +253,94 @@ function LogoBrandingSection() {
 
         {hasAccess ? (
           <>
-            {/* Logo preview */}
-            <div className="flex items-center gap-4">
-              <div className="w-16 h-16 rounded-xl border border-surface-border bg-slate-800
-                              flex items-center justify-center flex-shrink-0 overflow-hidden">
-                {currentLogoUrl ? (
+            {/* Hidden file input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className="hidden"
+              onChange={handleFileChange}
+            />
+
+            {/* Preview + upload trigger */}
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isPending}
+              className="flex items-center gap-4 w-full text-left group disabled:opacity-50"
+            >
+              <div className="w-16 h-16 rounded-xl border-2 border-dashed border-surface-border
+                              bg-slate-800 flex items-center justify-center flex-shrink-0
+                              overflow-hidden group-hover:border-brand/50 transition-colors">
+                {isLoading ? (
+                  <div className="w-full h-full bg-slate-700 animate-pulse rounded-xl" />
+                ) : displayUrl ? (
                   <img
-                    src={currentLogoUrl}
+                    src={displayUrl}
                     alt="Logo del taller"
                     className="w-full h-full object-contain p-1"
                     onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                   />
                 ) : (
-                  <span className="text-2xl opacity-40">🏪</span>
+                  <svg className="w-6 h-6 text-slate-600 group-hover:text-brand/60 transition-colors"
+                       fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round"
+                          d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                  </svg>
                 )}
               </div>
               <div>
-                <p className="text-slate-300 text-sm font-medium">
-                  {currentLogoUrl ? "Logo configurado" : "Sin logo"}
+                <p className="text-slate-300 text-sm font-medium group-hover:text-white transition-colors">
+                  {selectedFile ? selectedFile.name : currentLogoUrl ? "Cambiar logo" : "Subir logo"}
                 </p>
                 <p className="text-slate-500 text-xs mt-0.5">
-                  Se muestra en los presupuestos de tus clientes
+                  JPG, PNG o WebP · máx. 2 MB
                 </p>
               </div>
-            </div>
+            </button>
 
-            {isLoading ? (
-              <div className="h-10 bg-slate-800 rounded-xl animate-pulse" />
-            ) : (
-              <div className="flex flex-col gap-2">
-                <input
-                  type="url"
-                  value={urlInput}
-                  onChange={(e) => setUrlInput(e.target.value)}
-                  placeholder="https://mi-taller.com/logo.png"
-                  className="w-full h-10 px-3 rounded-xl bg-slate-800 border border-surface-border
-                             text-slate-200 text-sm placeholder-slate-600
-                             focus:outline-none focus:ring-2 focus:ring-brand"
-                />
-                {mutation.isError && (
-                  <p className="text-red-400 text-xs">
-                    {(mutation.error as Error).message}
-                  </p>
-                )}
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => mutation.mutate()}
-                    disabled={mutation.isPending}
-                    className="flex-1 h-10 rounded-xl bg-brand hover:bg-brand-hover
-                               text-white font-semibold text-sm transition-colors
-                               disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {mutation.isPending ? "Guardando…" : mutation.isSuccess ? "¡Guardado!" : "Guardar logo"}
-                  </button>
-                  {currentLogoUrl && (
-                    <button
-                      onClick={() => { setUrlInput(""); mutation.mutate(); }}
-                      disabled={mutation.isPending}
-                      className="h-10 px-4 rounded-xl border border-slate-700 text-slate-400
-                                 hover:text-red-400 hover:border-red-900/50 text-sm transition-colors"
-                    >
-                      Quitar
-                    </button>
-                  )}
-                </div>
-              </div>
+            {/* Error */}
+            {(uploadMutation.isError || removeMutation.isError) && (
+              <p className="text-red-400 text-xs">
+                {((uploadMutation.error ?? removeMutation.error) as Error).message}
+              </p>
             )}
+
+            {/* Actions */}
+            <div className="flex gap-2">
+              <button
+                onClick={() => uploadMutation.mutate()}
+                disabled={!selectedFile || isPending}
+                className="flex-1 h-10 rounded-xl bg-brand hover:bg-brand-hover
+                           text-white font-semibold text-sm transition-colors
+                           disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {uploadMutation.isPending ? "Subiendo…"
+                  : uploadMutation.isSuccess && !selectedFile ? "¡Guardado!"
+                  : "Guardar logo"}
+              </button>
+              {currentLogoUrl && !selectedFile && (
+                <button
+                  onClick={() => removeMutation.mutate()}
+                  disabled={isPending}
+                  className="h-10 px-4 rounded-xl border border-slate-700 text-slate-400
+                             hover:text-red-400 hover:border-red-900/50 text-sm transition-colors
+                             disabled:opacity-40"
+                >
+                  {removeMutation.isPending ? "Quitando…" : "Quitar"}
+                </button>
+              )}
+              {selectedFile && (
+                <button
+                  onClick={() => { setSelectedFile(null); setPreview(null); }}
+                  disabled={isPending}
+                  className="h-10 px-4 rounded-xl border border-slate-700 text-slate-400
+                             hover:text-slate-200 text-sm transition-colors"
+                >
+                  Cancelar
+                </button>
+              )}
+            </div>
           </>
         ) : (
           /* Locked state */

@@ -19,6 +19,22 @@ export const tenantController = {
     }
   },
 
+  // DELETE /api/v1/tenant/settings/logo
+  async removeLogo(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      await pool.query(
+        `UPDATE tenants
+            SET settings   = jsonb_set(settings, '{logo_url}', 'null'::jsonb, true),
+                updated_at = NOW()
+          WHERE id = $1`,
+        [req.user.tenant_id]
+      );
+      res.json({ logo_url: null });
+    } catch (err) {
+      next(err);
+    }
+  },
+
   // PATCH /api/v1/tenant/settings/logo  (multipart/form-data, campo "logo")
   async updateLogo(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {

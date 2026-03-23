@@ -20,4 +20,11 @@ router.patch(
   tenantController.updateLogo
 );
 
+router.delete(
+  "/settings/logo",
+  authorize("owner", "admin"),
+  requirePlan("professional"),
+  tenantController.removeLogo
+);
+
 export default router;
