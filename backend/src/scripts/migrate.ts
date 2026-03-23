@@ -27,7 +27,8 @@ const ssl =
     ? { rejectUnauthorized: false }
     : false;
 
-const MIGRATIONS_DIR = path.resolve(__dirname, "../../../database/migrations");
+// __dirname en dist/ = /app/dist/scripts → ../../ = /app = backend/
+const MIGRATIONS_DIR = path.resolve(__dirname, "../../database/migrations");
 
 async function run() {
   const client = new Client({ connectionString: DATABASE_URL, ssl });

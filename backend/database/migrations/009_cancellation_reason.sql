@@ -1,0 +1,2 @@
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS cancellation_reason TEXT;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ;
