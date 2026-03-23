@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AppShell } from "../../components/layout/AppShell";
 import { api } from "../../api/client";
+import { useAuthStore } from "../../store/auth.store";
 
 // ---------------------------------------------------------------------------
 // Cancel subscription modal
@@ -348,12 +349,14 @@ function PlanCard({
   subStatus,
   onSubscribe,
   loading,
+  canManage,
 }: {
   plan:        PlanDef;
   currentPlan: string;
   subStatus:   string;
   onSubscribe: (planId: string) => void;
   loading:     boolean;
+  canManage:   boolean;
 }) {
   const isTrialing    = subStatus === "trialing";
   const isTrialPlan   = isTrialing && plan.id === "professional";
@@ -510,23 +513,25 @@ function PlanCard({
         })}
       </ul>
 
-      {/* CTA */}
-      <div className="flex flex-col gap-1.5">
-        <button
-          onClick={() => { if (!isCurrent && !loading) onSubscribe(plan.id); }}
-          disabled={isCurrent || loading}
-          className={`w-full h-12 rounded-xl text-sm transition-all
-                      disabled:opacity-50 disabled:cursor-not-allowed
-                      ${btnClass}`}
-        >
-          {btnLabel}
-        </button>
-        {isTrialPlan && (
-          <p className="text-center text-[10px] text-emerald-400/60">
-            Para mantener el acceso luego del trial
-          </p>
-        )}
-      </div>
+      {/* CTA — only owners/admins can act */}
+      {canManage && (
+        <div className="flex flex-col gap-1.5">
+          <button
+            onClick={() => { if (!isCurrent && !loading) onSubscribe(plan.id); }}
+            disabled={isCurrent || loading}
+            className={`w-full h-12 rounded-xl text-sm transition-all
+                        disabled:opacity-50 disabled:cursor-not-allowed
+                        ${btnClass}`}
+          >
+            {btnLabel}
+          </button>
+          {isTrialPlan && (
+            <p className="text-center text-[10px] text-emerald-400/60">
+              Para mantener el acceso luego del trial
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -540,6 +545,9 @@ export function Billing() {
   const queryClient    = useQueryClient();
   const [loadingPlan,  setLoadingPlan]  = useState<string | null>(null);
   const [showCancel,   setShowCancel]   = useState(false);
+
+  const userRole  = useAuthStore((s) => s.user?.role);
+  const canManage = userRole === "owner" || userRole === "admin";
 
   const justPaid = searchParams.get("success") === "1";
 
@@ -610,9 +618,21 @@ export function Billing() {
         ) : status ? (
           <StatusBanner
             status={status}
-            onCancel={status.sub_status === "active" ? () => setShowCancel(true) : undefined}
+            onCancel={canManage && status.sub_status === "active" ? () => setShowCancel(true) : undefined}
           />
         ) : null}
+
+        {/* Read-only notice for non-managers */}
+        {!canManage && (
+          <div className="flex items-center gap-2.5 px-4 py-3 rounded-xl bg-slate-800/40 border border-slate-700/50">
+            <svg className="w-4 h-4 text-slate-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+            </svg>
+            <p className="text-slate-500 text-xs">
+              Solo el administrador del taller puede gestionar la facturación.
+            </p>
+          </div>
+        )}
 
         {/* Plan grid */}
         <section>
@@ -644,6 +664,7 @@ export function Billing() {
                   subStatus={subStatus}
                   onSubscribe={handleSubscribe}
                   loading={loadingPlan === plan.id}
+                  canManage={canManage}
                 />
               ))}
             </div>

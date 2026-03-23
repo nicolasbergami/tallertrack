@@ -1,5 +1,5 @@
 import { Router, Request, Response, NextFunction } from "express";
-import { authenticate } from "../../middleware/auth.middleware";
+import { authenticate, authorize } from "../../middleware/auth.middleware";
 import { billingController } from "./billing.controller";
 
 const router = Router();
@@ -25,9 +25,11 @@ router.use(authenticate);
 router.get("/status", wrap(billingController.getStatus.bind(billingController)));
 
 // POST /api/v1/billing/subscribe   — create MP preapproval and get init_point
-router.post("/subscribe", wrap(billingController.createSubscription.bind(billingController)));
+// Only owners/admins can purchase or change the plan
+router.post("/subscribe", authorize("owner", "admin"), wrap(billingController.createSubscription.bind(billingController)));
 
 // POST /api/v1/billing/cancel      — cancel subscription (access until period_end)
-router.post("/cancel", wrap(billingController.cancelSubscription.bind(billingController)));
+// Only owners/admins can cancel
+router.post("/cancel", authorize("owner", "admin"), wrap(billingController.cancelSubscription.bind(billingController)));
 
 export default router;
