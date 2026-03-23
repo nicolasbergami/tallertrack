@@ -57,6 +57,16 @@ export async function runMigrations(): Promise<void> {
         ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ
     `);
 
+    // 010 — Onboarding completion flag
+    await client.query(`
+      ALTER TABLE tenants
+        ADD COLUMN IF NOT EXISTS onboarded BOOLEAN NOT NULL DEFAULT FALSE
+    `);
+    // Mark all pre-existing tenants as onboarded so they don't see the modal
+    await client.query(`
+      UPDATE tenants SET onboarded = TRUE WHERE deleted_at IS NULL AND onboarded = FALSE
+    `);
+
     console.log("✅ Migrations applied.");
   } catch (err) {
     // Non-fatal in dev if adminPool lacks DDL rights — warn and continue

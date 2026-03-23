@@ -1,12 +1,22 @@
 import { Request, Response } from "express";
 import QRCode from "qrcode";
 import { sessionManager } from "../../integrations/whatsapp-direct/session-manager";
+import { adminPool } from "../../config/database";
 
 export const whatsappController = {
   // ── GET /api/v1/whatsapp/status ─────────────────────────────────────────
-  getStatus(req: Request, res: Response): void {
+  async getStatus(req: Request, res: Response): Promise<void> {
     const { tenant_id } = req.user;
-    res.json(sessionManager.getStatus(tenant_id));
+    const waStatus = sessionManager.getStatus(tenant_id);
+    try {
+      const { rows } = await adminPool.query<{ onboarded: boolean }>(
+        "SELECT onboarded FROM tenants WHERE id = $1 AND deleted_at IS NULL",
+        [tenant_id],
+      );
+      res.json({ ...waStatus, onboarded: rows[0]?.onboarded ?? false });
+    } catch {
+      res.json({ ...waStatus, onboarded: false });
+    }
   },
 
   // ── GET /api/v1/whatsapp/connect  (SSE — streams QR + connection events) ─
@@ -58,6 +68,13 @@ export const whatsappController = {
     };
 
     const onConnected = (data: { phone?: string }) => {
+      // Fire-and-forget: mark tenant as onboarded now that WA is connected
+      adminPool.query(
+        "UPDATE tenants SET onboarded = TRUE WHERE id = $1",
+        [tenant_id],
+      ).catch((err: unknown) =>
+        console.error("[WhatsApp] Failed to mark tenant as onboarded:", err),
+      );
       send({ type: "connected", phone: data.phone ?? null });
       cleanup();
       res.end();
