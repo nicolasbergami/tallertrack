@@ -44,14 +44,15 @@ export const tenantController = {
       const uploadResult = await new Promise<{ secure_url: string }>((resolve, reject) => {
         const stream = cloudinary.uploader.upload_stream(
           {
-            folder:         "tallertrack/logos",
-            public_id:      `tenant_${req.user.tenant_id}`,
-            overwrite:      true,
-            resource_type:  "image",
-            transformation: [{ width: 400, height: 400, crop: "limit" }],
+            folder:    "tallertrack/logos",
+            public_id: `tenant_${req.user.tenant_id}`,
+            overwrite: true,
           },
           (error, result) => {
-            if (error || !result) return reject(error ?? new Error("Cloudinary upload failed"));
+            if (error || !result) {
+              console.error("[Cloudinary] upload error:", error);
+              return reject(error ?? new Error("Cloudinary upload failed"));
+            }
             resolve(result as { secure_url: string });
           }
         );

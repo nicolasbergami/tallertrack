@@ -29,7 +29,10 @@ app.set("trust proxy", 1);
 // ---------------------------------------------------------------------------
 // Security headers
 // ---------------------------------------------------------------------------
-app.use(helmet());
+// crossOriginResourcePolicy disabled: Railway sits behind Vercel's proxy,
+// so the browser always sees same-origin requests. Setting same-origin here
+// causes ERR_BLOCKED_BY_RESPONSE.NotSameOrigin when Vercel forwards the header.
+app.use(helmet({ crossOriginResourcePolicy: false }));
 
 // ---------------------------------------------------------------------------
 // Body parsing

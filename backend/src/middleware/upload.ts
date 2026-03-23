@@ -1,5 +1,4 @@
 import multer from "multer";
-import { createHttpError } from "./error.middleware";
 
 const ALLOWED_MIME = new Set(["image/jpeg", "image/png", "image/webp"]);
 const MAX_BYTES = 2 * 1024 * 1024; // 2 MB
@@ -16,7 +15,7 @@ export const uploadLogo = multer({
     if (ALLOWED_MIME.has(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(createHttpError(400, "Solo se permiten imágenes JPG, PNG o WebP.") as unknown as null, false);
+      cb(new Error("Solo se permiten imágenes JPG, PNG o WebP."));
     }
   },
 }).single("logo");
