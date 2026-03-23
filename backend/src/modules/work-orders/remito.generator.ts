@@ -168,22 +168,24 @@ export function generateRemitoPdf(
       const rowBg = idx % 2 === 0 ? C.bg : "#162032";
       doc.rect(MARGIN, y, CONTENT, 16).fill(rowBg);
 
-      const lineTotal = item.quantity * item.unit_price;
+      const qty      = Number(item.quantity);
+      const price    = Number(item.unit_price);
+      const lineTotal = qty * price;
       doc.font("Helvetica").fontSize(8).fillColor(C.white);
-      doc.text(item.description,        colDesc  + 4, y + 4, { width: colQty - colDesc - 8, ellipsis: true });
-      doc.text(String(item.quantity),   colQty,        y + 4, { width: 40, align: "right" });
-      doc.text(fmt(item.unit_price),    colPrice - 60, y + 4, { width: 60, align: "right" });
+      doc.text(item.description,   colDesc  + 4, y + 4, { width: colQty - colDesc - 8, ellipsis: true });
+      doc.text(String(qty),        colQty,        y + 4, { width: 40, align: "right" });
+      doc.text(fmt(price),         colPrice - 60, y + 4, { width: 60, align: "right" });
       doc.fillColor(C.white)
-         .text(fmt(lineTotal),          colTotal - 55, y + 4, { width: 55, align: "right" });
+         .text(fmt(lineTotal),     colTotal - 55, y + 4, { width: 55, align: "right" });
       y += 16;
     });
 
     // Subtotals
     y += 8;
     const totals: [string, string, boolean][] = [
-      ["Subtotal",       fmt(quote.subtotal), false],
-      ["IVA (19%)",      fmt(quote.tax),      false],
-      ["TOTAL",          fmt(quote.total),    true],
+      ["Subtotal",       fmt(Number(quote.subtotal)),    false],
+      [`IVA (${Math.round(Number(quote.tax_rate) * 100)}%)`, fmt(Number(quote.tax_amount)), false],
+      ["TOTAL",          fmt(Number(quote.total)),       true],
     ];
 
     totals.forEach(([label, value, bold]) => {

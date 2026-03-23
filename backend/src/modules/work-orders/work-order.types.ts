@@ -156,7 +156,8 @@ export interface QuoteWithItems {
   work_order_id: string;
   status:        "draft" | "sent" | "approved" | "rejected" | "expired";
   subtotal:      number;
-  tax:           number;
+  tax_amount:    number;
+  tax_rate:      number;
   total:         number;
   notes:         string | null;
   sent_at:       string | null;
