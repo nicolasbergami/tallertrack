@@ -167,11 +167,12 @@ function TenantAvatar({ name }: { name: string }) {
 
 function StatusPill({ status }: { status: string }) {
   const cfg: Record<string, { label: string; dot: string; bg: string; text: string; border: string }> = {
-    active:    { label:"Activo",    dot:"bg-emerald-400", bg:"bg-emerald-500/10", text:"text-emerald-400", border:"border-emerald-500/20" },
-    trialing:  { label:"En Trial",  dot:"bg-amber-400",   bg:"bg-amber-500/10",  text:"text-amber-400",   border:"border-amber-500/20"   },
-    inactive:  { label:"Inactivo",  dot:"bg-slate-500",   bg:"bg-slate-700/30",  text:"text-slate-500",   border:"border-slate-600/30"   },
-    cancelled: { label:"Cancelado", dot:"bg-red-500",     bg:"bg-red-500/10",    text:"text-red-400",     border:"border-red-500/20"     },
-    past_due:  { label:"Vencido",   dot:"bg-yellow-500",  bg:"bg-yellow-500/10", text:"text-yellow-400",  border:"border-yellow-500/20"  },
+    active:    { label:"Activo",     dot:"bg-emerald-400", bg:"bg-emerald-500/10", text:"text-emerald-400", border:"border-emerald-500/20" },
+    trialing:  { label:"En Trial",   dot:"bg-amber-400",   bg:"bg-amber-500/10",  text:"text-amber-400",   border:"border-amber-500/20"   },
+    inactive:  { label:"Inactivo",   dot:"bg-slate-500",   bg:"bg-slate-700/30",  text:"text-slate-500",   border:"border-slate-600/30"   },
+    canceling: { label:"Cancelando", dot:"bg-orange-400",  bg:"bg-orange-500/10", text:"text-orange-400",  border:"border-orange-500/20"  },
+    cancelled: { label:"Cancelado",  dot:"bg-red-500",     bg:"bg-red-500/10",    text:"text-red-400",     border:"border-red-500/20"     },
+    past_due:  { label:"Vencido",    dot:"bg-yellow-500",  bg:"bg-yellow-500/10", text:"text-yellow-400",  border:"border-yellow-500/20"  },
   };
   const s = cfg[status] ?? cfg.inactive;
   return (
@@ -448,7 +449,20 @@ function TenantRow({ tenant, onModal, onImpersonate }: {
       {/* Plan */}
       <td className="px-5 py-3.5"><PlanBadge plan={tenant.plan} /></td>
       {/* Estado */}
-      <td className="px-5 py-3.5"><StatusPill status={tenant.sub_status} /></td>
+      <td className="px-5 py-3.5">
+        <div className="flex flex-col gap-1">
+          <StatusPill status={tenant.sub_status} />
+          {tenant.cancellation_reason &&
+           (tenant.sub_status === "canceling" || tenant.sub_status === "cancelled") && (
+            <p
+              className="text-[10px] text-slate-600 max-w-[130px] truncate cursor-default"
+              title={tenant.cancellation_reason}
+            >
+              {tenant.cancellation_reason}
+            </p>
+          )}
+        </div>
+      </td>
       {/* Usuarios */}
       <td className="px-5 py-3.5">
         <div className="flex items-center justify-end gap-1.5 text-slate-400">

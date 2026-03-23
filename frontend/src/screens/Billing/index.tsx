@@ -5,6 +5,121 @@ import { AppShell } from "../../components/layout/AppShell";
 import { api } from "../../api/client";
 
 // ---------------------------------------------------------------------------
+// Cancel subscription modal
+// ---------------------------------------------------------------------------
+
+const CANCEL_REASONS = [
+  { id: "price",   label: "Precio muy alto" },
+  { id: "unused",  label: "Ya no uso el servicio" },
+  { id: "switch",  label: "Me cambié a otro sistema" },
+  { id: "tech",    label: "Problemas técnicos" },
+  { id: "other",   label: "Otro" },
+];
+
+function CancelModal({
+  periodEnd,
+  onClose,
+  onConfirm,
+  loading,
+}: {
+  periodEnd:  string | null;
+  onClose:    () => void;
+  onConfirm:  (reason: string) => void;
+  loading:    boolean;
+}) {
+  const [selected, setSelected] = useState("");
+  const [custom,   setCustom]   = useState("");
+
+  const finalReason = selected === "other" ? custom.trim() : selected;
+  const canSubmit   = !!selected && (selected !== "other" || custom.trim().length > 0);
+
+  const endDate = periodEnd
+    ? new Date(periodEnd).toLocaleDateString("es-AR", { day: "numeric", month: "long", year: "numeric" })
+    : null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
+      style={{ background: "rgba(0,0,0,0.8)", backdropFilter: "blur(8px)" }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div
+        className="w-full max-w-sm rounded-2xl border border-white/10 p-6 flex flex-col gap-5"
+        style={{ background: "#0D1117" }}
+      >
+        {/* Header */}
+        <div>
+          <p className="text-white font-bold text-base">Cancelar suscripción</p>
+          <p className="text-slate-400 text-sm mt-1 leading-relaxed">
+            {endDate
+              ? `Seguís teniendo acceso hasta el ${endDate}. No se realizarán más cobros.`
+              : "No se realizarán más cobros. Tu acceso continúa hasta que venza el período actual."}
+          </p>
+        </div>
+
+        {/* Reason selector */}
+        <div className="flex flex-col gap-2">
+          <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+            ¿Por qué cancelás?
+          </p>
+          {CANCEL_REASONS.map((r) => (
+            <button
+              key={r.id}
+              onClick={() => setSelected(r.id)}
+              className={`w-full text-left px-4 py-3 rounded-xl border text-sm transition-all
+                          ${selected === r.id
+                            ? "border-brand/60 bg-brand/10 text-white"
+                            : "border-white/8 text-slate-400 hover:border-white/15 hover:text-slate-300"
+                          }`}
+            >
+              <div className="flex items-center gap-3">
+                <span className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center
+                                  ${selected === r.id ? "border-brand" : "border-slate-600"}`}>
+                  {selected === r.id && <span className="w-2 h-2 rounded-full bg-brand" />}
+                </span>
+                {r.label}
+              </div>
+            </button>
+          ))}
+          {selected === "other" && (
+            <textarea
+              autoFocus
+              value={custom}
+              onChange={(e) => setCustom(e.target.value)}
+              placeholder="Contanos más…"
+              rows={3}
+              className="w-full px-3 py-2.5 rounded-xl border border-white/10 bg-white/[0.03]
+                         text-slate-200 text-[16px] md:text-sm placeholder-slate-600 resize-none
+                         focus:outline-none focus:ring-2 focus:ring-brand/50 focus:border-brand/40"
+            />
+          )}
+        </div>
+
+        {/* Actions */}
+        <div className="flex gap-2">
+          <button
+            onClick={onClose}
+            className="flex-1 h-11 rounded-xl border border-white/10 text-slate-400
+                       hover:bg-white/5 text-sm transition-colors"
+          >
+            Volver
+          </button>
+          <button
+            onClick={() => canSubmit && onConfirm(finalReason)}
+            disabled={!canSubmit || loading}
+            className="flex-1 h-11 rounded-xl bg-red-700/80 hover:bg-red-700 text-white
+                       font-semibold text-sm transition-colors
+                       disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {loading ? "Procesando…" : "Confirmar cancelación"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Static plan definitions — IDs must match backend plan keys
 // ---------------------------------------------------------------------------
 
@@ -154,11 +269,36 @@ function TrialBanner({ days_remaining }: { days_remaining: number | null }) {
 // Status Banner (active / inactive)
 // ---------------------------------------------------------------------------
 
-function StatusBanner({ status }: { status: BillingStatus }) {
+function StatusBanner({
+  status,
+  onCancel,
+}: {
+  status:    BillingStatus;
+  onCancel?: () => void;
+}) {
   const { sub_status, days_remaining, sub_current_period_end } = status;
 
   if (sub_status === "trialing") {
     return <TrialBanner days_remaining={days_remaining} />;
+  }
+
+  if (sub_status === "canceling") {
+    const endDate = sub_current_period_end
+      ? new Date(sub_current_period_end).toLocaleDateString("es-AR", {
+          day: "numeric", month: "long", year: "numeric",
+        })
+      : null;
+    return (
+      <div className="bg-slate-800/50 border border-slate-600/40 rounded-2xl px-5 py-4">
+        <div className="flex items-center gap-2 mb-0.5">
+          <span className="w-2 h-2 rounded-full bg-slate-500 flex-shrink-0" />
+          <span className="text-slate-300 font-semibold text-sm">Suscripción cancelada</span>
+        </div>
+        {endDate && (
+          <p className="text-slate-500 text-xs">Tenés acceso hasta el {endDate}</p>
+        )}
+      </div>
+    );
   }
 
   if (sub_status === "active") {
@@ -175,6 +315,14 @@ function StatusBanner({ status }: { status: BillingStatus }) {
         </div>
         {endDate && (
           <p className="text-slate-400 text-xs">Próximo cobro: {endDate}</p>
+        )}
+        {onCancel && (
+          <button
+            onClick={onCancel}
+            className="mt-2 text-[11px] text-slate-600 hover:text-red-400/80 transition-colors"
+          >
+            Cancelar suscripción
+          </button>
         )}
       </div>
     );
@@ -390,7 +538,8 @@ function PlanCard({
 export function Billing() {
   const [searchParams] = useSearchParams();
   const queryClient    = useQueryClient();
-  const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
+  const [loadingPlan,  setLoadingPlan]  = useState<string | null>(null);
+  const [showCancel,   setShowCancel]   = useState(false);
 
   const justPaid = searchParams.get("success") === "1";
 
@@ -409,6 +558,16 @@ export function Billing() {
     ...plan,
     price: apiPlans?.find(p => p.id === plan.id)?.price ?? plan.price,
   }));
+
+  const cancelMutation = useMutation({
+    mutationFn: (reason: string) =>
+      api.post<{ success: boolean }>("/billing/cancel", { reason }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["billing-status"] });
+      setShowCancel(false);
+    },
+    onError: (err: Error) => alert(err.message),
+  });
 
   const subscribeMutation = useMutation({
     mutationFn: (plan: string) =>
@@ -449,7 +608,10 @@ export function Billing() {
         {statusLoading ? (
           <div className="h-20 bg-slate-800/60 rounded-2xl animate-pulse" />
         ) : status ? (
-          <StatusBanner status={status} />
+          <StatusBanner
+            status={status}
+            onCancel={status.sub_status === "active" ? () => setShowCancel(true) : undefined}
+          />
         ) : null}
 
         {/* Plan grid */}
@@ -487,6 +649,15 @@ export function Billing() {
             </div>
           )}
         </section>
+
+        {showCancel && (
+          <CancelModal
+            periodEnd={status?.sub_current_period_end ?? null}
+            onClose={() => setShowCancel(false)}
+            onConfirm={(reason) => cancelMutation.mutate(reason)}
+            loading={cancelMutation.isPending}
+          />
+        )}
 
         <p className="text-center text-[11px] text-slate-600 pb-4">
           Los cobros se realizan mensualmente a través de Mercado Pago.

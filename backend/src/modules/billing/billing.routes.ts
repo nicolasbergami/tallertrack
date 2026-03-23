@@ -27,4 +27,7 @@ router.get("/status", wrap(billingController.getStatus.bind(billingController)))
 // POST /api/v1/billing/subscribe   — create MP preapproval and get init_point
 router.post("/subscribe", wrap(billingController.createSubscription.bind(billingController)));
 
+// POST /api/v1/billing/cancel      — cancel subscription (access until period_end)
+router.post("/cancel", wrap(billingController.cancelSubscription.bind(billingController)));
+
 export default router;

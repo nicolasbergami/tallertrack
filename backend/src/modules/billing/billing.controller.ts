@@ -8,6 +8,10 @@ const subscribeDtoSchema = z.object({
   plan: z.enum(["starter", "professional", "enterprise"]),
 });
 
+const cancelDtoSchema = z.object({
+  reason: z.string().min(1).max(500),
+});
+
 export const billingController = {
   // ── GET /api/v1/billing/status ─────────────────────────────────────────
   async getStatus(req: Request, res: Response): Promise<void> {
@@ -38,6 +42,13 @@ export const billingController = {
     );
 
     res.status(201).json(result);
+  },
+
+  // ── POST /api/v1/billing/cancel ───────────────────────────────────────
+  async cancelSubscription(req: Request, res: Response): Promise<void> {
+    const { reason } = cancelDtoSchema.parse(req.body);
+    await billingService.cancelSubscription(req.user.tenant_id, reason);
+    res.json({ success: true });
   },
 
   // ── POST /api/v1/billing/webhook (public — called by MP) ──────────────

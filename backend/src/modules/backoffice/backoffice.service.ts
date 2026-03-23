@@ -97,6 +97,7 @@ export const backofficeService = {
           t.trial_ends_at,
           t.sub_current_period_end,
           t.created_at,
+          t.cancellation_reason,
           COUNT(DISTINCT u.id)  FILTER (WHERE u.deleted_at IS NULL)                    AS user_count,
           COUNT(DISTINCT wo.id) FILTER (WHERE wo.status NOT IN ('delivered','cancelled')) AS active_work_orders,
           COUNT(*) OVER ()                                                               AS total_count

@@ -41,7 +41,8 @@ export async function requireActiveSubscription(
       && !!t.trial_ends_at
       && new Date(t.trial_ends_at) > now;
 
-    const isActive = t.sub_status === "active"
+    // 'canceling': tenant cancelled but already paid — access until period_end
+    const isActive = (t.sub_status === "active" || t.sub_status === "canceling")
       && !!t.sub_current_period_end
       && new Date(t.sub_current_period_end) > now;
 

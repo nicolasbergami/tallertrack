@@ -24,6 +24,7 @@ export interface BackofficeTenant {
   created_at:             string;
   user_count:             number;
   active_work_orders:     number;
+  cancellation_reason:    string | null;
 }
 
 export interface TenantListResponse {

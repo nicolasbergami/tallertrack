@@ -54,6 +54,23 @@ async function mpPost<T>(path: string, body: object): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+async function mpPut<T>(path: string, body: object): Promise<T> {
+  const token = requireMpToken();
+  const res = await fetch(`${MP_API}${path}`, {
+    method:  "PUT",
+    headers: {
+      Authorization:  `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const errBody = await res.text();
+    throw new Error(`MP API ${res.status}: ${errBody}`);
+  }
+  return res.json() as Promise<T>;
+}
+
 /** Fetch preapproval details from MP */
 async function fetchPreapproval(id: string): Promise<MpPreapproval> {
   return mpGet<MpPreapproval>(`/preapproval/${id}`);
@@ -135,14 +152,15 @@ export const billingService = {
     const t = rows[0];
     const now = new Date();
 
-    const inTrial  = t.sub_status === "trialing" && !!t.trial_ends_at && new Date(t.trial_ends_at) > now;
-    const isActive = t.sub_status === "active"   && !!t.sub_current_period_end && new Date(t.sub_current_period_end) > now;
-    const isAccessible = inTrial || isActive;
+    const inTrial     = t.sub_status === "trialing"  && !!t.trial_ends_at          && new Date(t.trial_ends_at) > now;
+    const isActive    = t.sub_status === "active"    && !!t.sub_current_period_end && new Date(t.sub_current_period_end) > now;
+    const isCanceling = t.sub_status === "canceling" && !!t.sub_current_period_end && new Date(t.sub_current_period_end) > now;
+    const isAccessible = inTrial || isActive || isCanceling;
 
     let daysRemaining: number | null = null;
     if (inTrial && t.trial_ends_at) {
       daysRemaining = Math.ceil((new Date(t.trial_ends_at).getTime() - now.getTime()) / 86_400_000);
-    } else if (isActive && t.sub_current_period_end) {
+    } else if ((isActive || isCanceling) && t.sub_current_period_end) {
       daysRemaining = Math.ceil((new Date(t.sub_current_period_end).getTime() - now.getTime()) / 86_400_000);
     }
 
@@ -359,5 +377,35 @@ export const billingService = {
     );
 
     console.log(`[Billing] Tenant ${tenantId} — payment approved, period extended.`);
+  },
+
+  // ── POST /billing/cancel ─────────────────────────────────────────────────
+  async cancelSubscription(tenantId: string, reason: string): Promise<void> {
+    const { rows } = await pool.query<{ mp_preapproval_id: string | null }>(
+      `SELECT mp_preapproval_id FROM tenants WHERE id = $1`,
+      [tenantId]
+    );
+    if (!rows[0]) throw createHttpError(404, "Tenant no encontrado.");
+
+    const { mp_preapproval_id } = rows[0];
+
+    // Tell MP to stop charging — fire-and-forget, never blocks the DB update
+    if (mp_preapproval_id) {
+      mpPut(`/preapproval/${mp_preapproval_id}`, { status: "cancelled" })
+        .catch((err) => console.warn("[Billing] MP preapproval cancel error:", err));
+    }
+
+    // 'canceling': access remains until sub_current_period_end (already paid period)
+    await pool.query(
+      `UPDATE tenants
+          SET sub_status          = 'canceling',
+              cancellation_reason = $2,
+              cancelled_at        = NOW(),
+              updated_at          = NOW()
+        WHERE id = $1`,
+      [tenantId, reason]
+    );
+
+    console.log(`[Billing] Tenant ${tenantId} canceling — reason: ${reason}`);
   },
 };

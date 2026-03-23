@@ -47,6 +47,16 @@ export async function runMigrations(): Promise<void> {
       ON CONFLICT (slug) DO NOTHING
     `);
 
+    // 009 — Cancellation tracking columns on tenants
+    await client.query(`
+      ALTER TABLE tenants
+        ADD COLUMN IF NOT EXISTS cancellation_reason TEXT
+    `);
+    await client.query(`
+      ALTER TABLE tenants
+        ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ
+    `);
+
     console.log("✅ Migrations applied.");
   } catch (err) {
     // Non-fatal in dev if adminPool lacks DDL rights — warn and continue
