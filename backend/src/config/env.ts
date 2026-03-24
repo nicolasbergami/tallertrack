@@ -36,6 +36,10 @@ const envSchema = z.object({
   MP_ACCESS_TOKEN:   z.string().optional().default(""),
   MP_WEBHOOK_SECRET: z.string().optional().default(""),
 
+  // CORS — comma-separated list of allowed origins
+  // e.g. "https://tallertrack.com.ar,https://tallertrack-app.vercel.app"
+  CORS_ALLOWED_ORIGINS: z.string().default("http://localhost:5173"),
+
   // Backoffice / SuperAdmin
   // SUPERADMIN_EMAILS: comma-separated emails that bypass DB flag check.
   //   e.g. SUPERADMIN_EMAILS="admin@tallertrack.com,dev@tallertrack.com"

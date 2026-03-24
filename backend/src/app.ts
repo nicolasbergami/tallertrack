@@ -1,4 +1,5 @@
 import express from "express";
+import cors from "cors";
 import helmet from "helmet";
 import path from "path";
 import fs from "fs";
@@ -25,6 +26,30 @@ const app = express();
 
 // Trust Railway / Render / Heroku reverse proxy (needed for rate-limit + req.ip)
 app.set("trust proxy", 1);
+
+// ---------------------------------------------------------------------------
+// CORS — must come before all routes
+// ---------------------------------------------------------------------------
+const allowedOrigins = env.CORS_ALLOWED_ORIGINS
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
+
+app.use(
+  cors({
+    origin(origin, callback) {
+      // Allow requests with no Origin header (curl, Postman, server-to-server)
+      if (!origin) return callback(null, true);
+      // Always allow localhost in non-production (vite dev server, etc.)
+      if (env.NODE_ENV !== "production" && /^https?:\/\/localhost(:\d+)?$/.test(origin)) {
+        return callback(null, true);
+      }
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+      callback(new Error(`CORS: origin '${origin}' not allowed`));
+    },
+    credentials: true,
+  })
+);
 
 // ---------------------------------------------------------------------------
 // Security headers

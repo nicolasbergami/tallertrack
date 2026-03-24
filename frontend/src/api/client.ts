@@ -1,6 +1,8 @@
 import { useAuthStore } from "../store/auth.store";
 
-const BASE_URL = "/api/v1";
+// VITE_API_URL is set per-environment in Vercel (empty in local dev → relative path
+// goes through the Vite dev-server proxy configured in vite.config.ts).
+const BASE_URL = `${import.meta.env.VITE_API_URL ?? ""}/api/v1`;
 
 class ApiError extends Error {
   constructor(

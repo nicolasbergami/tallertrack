@@ -1,6 +1,5 @@
 // Public tracking API — no auth token required
-
-const BASE_URL = "/api/v1/public";
+const BASE_URL = `${import.meta.env.VITE_API_URL ?? ""}/api/v1/public`;
 
 export interface PublicQuoteItem {
   id: string;
