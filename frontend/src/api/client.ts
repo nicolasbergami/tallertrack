@@ -8,7 +8,7 @@ import { useAuthStore } from "../store/auth.store";
 function resolveApiBase(): string {
   if (typeof window !== "undefined") {
     const h = window.location.hostname;
-    if (h.includes("tallertrack-qa")) return "https://tallertrack-qa.up.railway.app";
+    if (h.includes("-qa")) return "https://tallertrack-qa.up.railway.app";
   }
   const configured = import.meta.env.VITE_API_URL as string | undefined;
   if (configured) return configured;
