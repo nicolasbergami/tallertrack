@@ -91,8 +91,10 @@ describe("Work Orders endpoints", () => {
         .set("Authorization", `Bearer ${token}`)
         .expect(200);
 
-      expect(res.body).toContain("diagnosing");
-      expect(res.body).toContain("cancelled");
+      // retorna { current: string, available: string[] }
+      expect(res.body.current).toBe("received");
+      expect(res.body.available).toContain("diagnosing");
+      expect(res.body.available).toContain("cancelled");
     });
   });
 
