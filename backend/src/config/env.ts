@@ -5,7 +5,8 @@ const envSchema = z.object({
   PORT: z.coerce.number().default(3000),
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   // Backend base URL — used for API links (approve/reject) sent via WhatsApp
-  BASE_URL: z.string().url().default("http://localhost:3000"),
+  // Note: z.string().url() rejects localhost (no TLD), so we use min(1) here
+  BASE_URL: z.string().min(1).default("http://localhost:3000"),
 
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
 
@@ -13,7 +14,7 @@ const envSchema = z.object({
   JWT_EXPIRES_IN: z.string().default("8h"),
 
   // Frontend base URL — used for tracking links sent via WhatsApp and QR codes
-  TRACKING_BASE_URL: z.string().url().default("https://tallertrack.com.ar"),
+  TRACKING_BASE_URL: z.string().min(1).default("https://tallertrack.com.ar"),
 
   WHATSAPP_PROVIDER: z.enum(["mock", "meta", "twilio"]).default("mock"),
   WHATSAPP_API_URL: z.string().optional(),
