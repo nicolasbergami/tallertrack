@@ -1,8 +1,21 @@
 import { useAuthStore } from "../store/auth.store";
 
-// VITE_API_URL is set per-environment in Vercel (empty in local dev → relative path
-// goes through the Vite dev-server proxy configured in vite.config.ts).
-const BASE_URL = `${import.meta.env.VITE_API_URL ?? ""}/api/v1`;
+// Resolve the backend base URL.
+// 1. Build-time: VITE_API_URL baked in by Vite (from Vercel env var or .env.production).
+// 2. Runtime fallback: detect known hostnames so QA works even if the env var
+//    didn't reach the build (Vercel Preview env var injection issues).
+// 3. Default "": local dev uses the Vite proxy configured in vite.config.ts.
+function resolveApiBase(): string {
+  const configured = import.meta.env.VITE_API_URL as string | undefined;
+  if (configured) return configured;
+  if (typeof window !== "undefined") {
+    const h = window.location.hostname;
+    if (h.includes("tallertrack-qa")) return "https://tallertrack-qa.up.railway.app";
+  }
+  return "";
+}
+
+const BASE_URL = `${resolveApiBase()}/api/v1`;
 
 class ApiError extends Error {
   constructor(
