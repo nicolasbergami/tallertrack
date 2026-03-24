@@ -5,7 +5,7 @@ function resolvePublicBase(): string {
     if (h.includes("-qa")) return "https://tallertrack-qa.up.railway.app/api/v1/public";
   }
   const configured = import.meta.env.VITE_API_URL as string | undefined;
-  if (configured) return `${configured}/api/v1/public`;
+  if (configured) return `${configured.replace(/\/+$/, "")}/api/v1/public`;
   return "/api/v1/public";
 }
 const BASE_URL = resolvePublicBase();
