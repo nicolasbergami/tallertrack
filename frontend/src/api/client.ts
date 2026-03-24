@@ -5,7 +5,7 @@ import { useAuthStore } from "../store/auth.store";
 // 2. Runtime fallback: detect known hostnames so QA works even if the env var
 //    didn't reach the build (Vercel Preview env var injection issues).
 // 3. Default "": local dev uses the Vite proxy configured in vite.config.ts.
-function resolveApiBase(): string {
+export function resolveApiBase(): string {
   if (typeof window !== "undefined") {
     const h = window.location.hostname;
     if (h.includes("-qa")) return "https://tallertrack-qa.up.railway.app";

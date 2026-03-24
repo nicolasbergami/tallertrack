@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "../../api/client";
+import { api, resolveApiBase } from "../../api/client";
 import { useAuthStore } from "../../store/auth.store";
 import { IconWhatsapp } from "../../components/ui/Icons";
 
@@ -210,7 +210,7 @@ function QRModal({ onClose, onConnected }: { onClose: () => void; onConnected: (
 
     (async () => {
       try {
-        const res = await fetch("/api/v1/whatsapp/connect", {
+        const res = await fetch(`${resolveApiBase()}/api/v1/whatsapp/connect`, {
           headers: { Authorization: `Bearer ${token}` },
           signal:  ctrl.signal,
         });

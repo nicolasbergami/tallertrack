@@ -17,7 +17,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { AppShell } from "../../components/layout/AppShell";
 import { WorkOrderCard } from "./WorkOrderCard";
 import { workOrdersApi } from "../../api/work-orders.api";
-import { api } from "../../api/client";
+import { api, resolveApiBase } from "../../api/client";
 import { WorkOrderStatus, WorkOrderDetail } from "../../types/work-order";
 import { ACTIVE_STATUSES, STATUS_CONFIG, NEXT_STATES } from "../../config/status.config";
 import { IconSearch, IconX, IconPlus, IconList, IconGrid } from "../../components/ui/Icons";
@@ -1048,7 +1048,7 @@ function OnboardingModal() {
 
     (async () => {
       try {
-        const res = await fetch("/api/v1/whatsapp/connect", {
+        const res = await fetch(`${resolveApiBase()}/api/v1/whatsapp/connect`, {
           headers: { Authorization: `Bearer ${token}` },
           signal:  ctrl.signal,
         });
