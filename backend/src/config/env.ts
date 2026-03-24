@@ -5,7 +5,8 @@ const envSchema = z.object({
   PORT: z.coerce.number().default(3000),
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   // Backend base URL — used for API links (approve/reject) sent via WhatsApp
-  BASE_URL: z.string().url().default("http://localhost:3000"),
+  // Note: z.string().url() rejects localhost (no TLD), so we use min(1) here
+  BASE_URL: z.string().min(1).default("http://localhost:3000"),
 
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
 
@@ -13,7 +14,7 @@ const envSchema = z.object({
   JWT_EXPIRES_IN: z.string().default("8h"),
 
   // Frontend base URL — used for tracking links sent via WhatsApp and QR codes
-  TRACKING_BASE_URL: z.string().url().default("https://tallertrack.com.ar"),
+  TRACKING_BASE_URL: z.string().min(1).default("https://tallertrack.com.ar"),
 
   WHATSAPP_PROVIDER: z.enum(["mock", "meta", "twilio"]).default("mock"),
   WHATSAPP_API_URL: z.string().optional(),
@@ -35,6 +36,14 @@ const envSchema = z.object({
   // Billing — Mercado Pago
   MP_ACCESS_TOKEN:   z.string().optional().default(""),
   MP_WEBHOOK_SECRET: z.string().optional().default(""),
+
+  // Seed on startup — si está en "true", ejecuta el seed al arrancar el servidor.
+  // Útil en entornos efímeros (QA, staging). NUNCA activar en producción.
+  SEED_ON_START: z.enum(["true", "false"]).optional(),
+
+  // CORS — comma-separated list of allowed origins
+  // e.g. "https://tallertrack.com.ar,https://tallertrack-app.vercel.app"
+  CORS_ALLOWED_ORIGINS: z.string().default("http://localhost:5173"),
 
   // Backoffice / SuperAdmin
   // SUPERADMIN_EMAILS: comma-separated emails that bypass DB flag check.

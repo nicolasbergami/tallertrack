@@ -14,7 +14,8 @@
       "Bash(winget install:*)",
       "Bash(cd \"C:\\\\Users\\\\nicol\\\\Documents\\\\TallerTrack\" && \\\\\n\"/c/Program Files/GitHub CLI/gh.exe\" repo create tallertrack \\\\\n  --public \\\\\n  --description \"SaaS platform for workshop management — PostgreSQL RLS + Node.js + React\" \\\\\n  --source . \\\\\n  --remote origin \\\\\n  --push 2>&1)",
       "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" repo:*)",
-      "Skill(claude-developer-platform)"
+      "Skill(claude-developer-platform)",
+      "mcp__ide__getDiagnostics"
     ]
   }
 }

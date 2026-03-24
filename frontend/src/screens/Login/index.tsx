@@ -1,17 +1,11 @@
 import { useState, FormEvent } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuthStore } from "../../store/auth.store";
+import { api } from "../../api/client";
 import { IconEye, IconEyeOff } from "../../components/ui/Icons";
 
 async function loginRequest(email: string, password: string) {
-  const res = await fetch("/api/v1/auth/login", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password }),
-  });
-  const body = await res.json();
-  if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
-  return body as {
+  return api.post<{
     token: string;
     user: {
       id: string; full_name: string; email: string;
@@ -19,7 +13,7 @@ async function loginRequest(email: string, password: string) {
       tenant_id: string; tenant_name: string; tenant_slug: string;
       plan?: string; sub_status?: string; is_system_admin?: boolean;
     };
-  };
+  }>("/auth/login", { email, password });
 }
 
 export function Login() {

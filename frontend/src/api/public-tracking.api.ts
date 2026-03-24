@@ -1,6 +1,14 @@
 // Public tracking API — no auth token required
-
-const BASE_URL = "/api/v1/public";
+function resolvePublicBase(): string {
+  if (typeof window !== "undefined") {
+    const h = window.location.hostname;
+    if (h.includes("-qa")) return "https://tallertrack-qa.up.railway.app/api/v1/public";
+  }
+  const configured = import.meta.env.VITE_API_URL as string | undefined;
+  if (configured) return `${configured}/api/v1/public`;
+  return "/api/v1/public";
+}
+const BASE_URL = resolvePublicBase();
 
 export interface PublicQuoteItem {
   id: string;
