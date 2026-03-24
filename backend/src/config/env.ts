@@ -37,6 +37,10 @@ const envSchema = z.object({
   MP_ACCESS_TOKEN:   z.string().optional().default(""),
   MP_WEBHOOK_SECRET: z.string().optional().default(""),
 
+  // Email — Resend (recuperación de contraseña, etc.)
+  RESEND_API_KEY:    z.string().optional().default(""),
+  RESEND_FROM_EMAIL: z.string().optional().default("TallerTrack <noreply@tallertrack.com.ar>"),
+
   // Seed on startup — si está en "true", ejecuta el seed al arrancar el servidor.
   // Útil en entornos efímeros (QA, staging). NUNCA activar en producción.
   SEED_ON_START: z.enum(["true", "false"]).optional(),

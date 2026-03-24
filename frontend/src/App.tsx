@@ -15,6 +15,8 @@ import { Taller }         from "./screens/Taller";
 import { Register }       from "./screens/Register";
 import { VerifyOtp }      from "./screens/Register/VerifyOtp";
 import { Landing }        from "./screens/Landing";
+import { ForgotPassword } from "./screens/ForgotPassword";
+import { ResetPassword }  from "./screens/ResetPassword";
 import { ProtectedRoute }   from "./components/ProtectedRoute";
 import { SuperAdminRoute }  from "./components/SuperAdminRoute";
 import { Backoffice }       from "./screens/Backoffice";
@@ -98,6 +100,8 @@ export default function App() {
             <Route path="/login"                                element={<Login />} />
             <Route path="/register"                             element={<Register />} />
             <Route path="/verify"                               element={<VerifyOtp />} />
+            <Route path="/forgot-password"                      element={<ForgotPassword />} />
+            <Route path="/reset-password"                       element={<ResetPassword />} />
             <Route path="/track/:tenantSlug/:orderNumber"       element={<PublicTracking />} />
 
             {/* Protected — redirect to /login if no token */}

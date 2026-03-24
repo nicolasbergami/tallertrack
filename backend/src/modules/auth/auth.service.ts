@@ -1,8 +1,10 @@
 import bcrypt from "bcrypt";
+import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import { pool, withTenantContext } from "../../config/database";
 import { env } from "../../config/env";
 import { createHttpError } from "../../middleware/error.middleware";
+import { sendPasswordResetEmail } from "../../integrations/email/resend.client";
 import { LoginDTO, LoginResponse, AuthUser, AuthTenant } from "./auth.types";
 import { JwtPayload } from "../../middleware/auth.middleware";
 
@@ -137,5 +139,72 @@ export const authService = {
       if (!rows[0]) throw createHttpError(404, "Usuario no encontrado.");
       return rows[0];
     });
+  },
+
+  // ── POST /auth/forgot-password ────────────────────────────────────────────
+  async forgotPassword(email: string): Promise<void> {
+    const normalizedEmail = email.toLowerCase().trim();
+
+    // Buscar usuario por email (igual que login — sin contexto de tenant)
+    const { rows } = await pool.query<{ id: string; tenant_id: string }>(
+      `SELECT id, tenant_id FROM users
+        WHERE email = $1 AND deleted_at IS NULL
+        LIMIT 1`,
+      [normalizedEmail]
+    );
+
+    // Siempre respondemos OK aunque el email no exista (evitar user enumeration)
+    if (!rows[0]) return;
+
+    const userId = rows[0].id;
+
+    // Generar token seguro: 32 bytes aleatorios → hex (64 chars)
+    const rawToken  = crypto.randomBytes(32).toString("hex");
+    const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+
+    // Eliminar tokens anteriores del mismo usuario y guardar el nuevo
+    await pool.query(`DELETE FROM password_reset_tokens WHERE user_id = $1`, [userId]);
+    await pool.query(
+      `INSERT INTO password_reset_tokens (user_id, token_hash, expires_at)
+       VALUES ($1, $2, NOW() + INTERVAL '1 hour')`,
+      [userId, tokenHash]
+    );
+
+    const resetUrl = `${env.TRACKING_BASE_URL}/reset-password?token=${rawToken}`;
+
+    // Envío fire-and-forget — nunca bloquea la respuesta HTTP
+    sendPasswordResetEmail(normalizedEmail, resetUrl).catch((err) =>
+      console.error("[Email] Failed to send password reset:", err)
+    );
+  },
+
+  // ── POST /auth/reset-password ─────────────────────────────────────────────
+  async resetPassword(rawToken: string, newPassword: string): Promise<void> {
+    const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+
+    const { rows } = await pool.query<{ user_id: string; expires_at: string }>(
+      `SELECT user_id, expires_at FROM password_reset_tokens
+        WHERE token_hash = $1
+        LIMIT 1`,
+      [tokenHash]
+    );
+
+    if (!rows[0]) throw createHttpError(400, "El enlace de recuperación es inválido o ya fue usado.");
+
+    if (new Date(rows[0].expires_at) < new Date()) {
+      throw createHttpError(400, "El enlace de recuperación expiró. Solicitá uno nuevo.");
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+
+    // Actualizar contraseña y eliminar el token en la misma operación
+    await pool.query(
+      `UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2`,
+      [passwordHash, rows[0].user_id]
+    );
+    await pool.query(
+      `DELETE FROM password_reset_tokens WHERE token_hash = $1`,
+      [tokenHash]
+    );
   },
 };
