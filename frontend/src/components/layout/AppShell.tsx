@@ -102,7 +102,7 @@ function PlanBadge({ plan, subStatus, onClick }: PlanBadgeProps) {
   let cls:   string;
 
   if (isTrialing) {
-    label = "14 Días de Prueba";
+    label = "1 Mes de Prueba";
     cls   = "bg-orange-500/20 text-orange-300 border-orange-500/40 hover:bg-orange-500/30";
   } else if (plan === "enterprise") {
     label = "Plan Platinum";

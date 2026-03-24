@@ -11,7 +11,7 @@ export function resolveApiBase(): string {
     if (h.includes("-qa")) return "https://tallertrack-qa.up.railway.app";
   }
   const configured = import.meta.env.VITE_API_URL as string | undefined;
-  if (configured) return configured;
+  if (configured) return configured.replace(/\/+$/, "");
   return "";
 }
 
