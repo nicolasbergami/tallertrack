@@ -67,6 +67,23 @@ export async function runMigrations(): Promise<void> {
       UPDATE tenants SET onboarded = TRUE WHERE deleted_at IS NULL AND onboarded = FALSE
     `);
 
+    // 011 — Password reset tokens
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS password_reset_tokens (
+        id         UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
+        user_id    UUID        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        token_hash TEXT        NOT NULL UNIQUE,
+        expires_at TIMESTAMPTZ NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_prt_token_hash ON password_reset_tokens(token_hash)
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_prt_user_id ON password_reset_tokens(user_id)
+    `);
+
     console.log("✅ Migrations applied.");
   } catch (err) {
     // Non-fatal in dev if adminPool lacks DDL rights — warn and continue
