@@ -8,51 +8,166 @@ on:
     branches:
       - master
 
+# ──────────────────────────────────────────────────────────────────────────────
+# CAPA 1 — Build check (TypeScript + Vite)
+# Detecta errores de compilación antes de correr cualquier test.
+# ──────────────────────────────────────────────────────────────────────────────
 jobs:
-  test-backend:
-    name: Backend Tests
+  build:
+    name: Build Check
     runs-on: ubuntu-latest
-    defaults:
-      run:
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Backend — instalar dependencias
+        run: npm ci
         working-directory: backend
 
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Backend — verificar compilación TypeScript
+        run: npx tsc --noEmit
+        working-directory: backend
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Frontend — instalar dependencias
+        run: npm ci
+        working-directory: frontend
+
+      - name: Frontend — build de producción
+        run: npm run build
+        working-directory: frontend
+
+# ──────────────────────────────────────────────────────────────────────────────
+# CAPA 2A — Tests unitarios (sin base de datos)
+# ──────────────────────────────────────────────────────────────────────────────
+  test-unit:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: "npm"
           cache-dependency-path: backend/package-lock.json
 
-      - name: Install dependencies
+      - name: Backend — instalar dependencias
         run: npm ci
+        working-directory: backend
 
-      - name: Run tests
+      - name: Backend — unit tests
         run: npm run test
+        working-directory: backend
 
-  test-frontend:
-    name: Frontend Tests
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: frontend
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: "npm"
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Install dependencies
+      - name: Frontend — instalar dependencias
         run: npm ci
+        working-directory: frontend
 
-      - name: Run tests
+      - name: Frontend — unit tests
         run: npm run test
+        working-directory: frontend
+
+# ──────────────────────────────────────────────────────────────────────────────
+# CAPA 2B — Tests de integración (con PostgreSQL real)
+# Valida que los endpoints HTTP respondan correctamente contra una DB real.
+# ──────────────────────────────────────────────────────────────────────────────
+  test-integration:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: build
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: tallertrack_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/tallertrack_test
+      ADMIN_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/tallertrack_test
+      JWT_SECRET: test-secret-at-least-32-characters-long-for-ci-only
+      NODE_ENV: test
+      WHATSAPP_PROVIDER: mock
+      BASE_URL: http://localhost:3000
+      TRACKING_BASE_URL: http://localhost:3000
+      CORS_ALLOWED_ORIGINS: http://localhost:5173
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Backend — instalar dependencias
+        run: npm ci
+        working-directory: backend
+
+      - name: Backend — integration tests
+        run: npm run test:integration
+        working-directory: backend
+
+# ──────────────────────────────────────────────────────────────────────────────
+# CAPA 3 — E2E con Playwright contra el entorno QA desplegado
+# Solo corre en Pull Requests hacia master (el entorno QA ya está desplegado
+# con la rama qa vía auto-deploy de Railway + Vercel).
+# ──────────────────────────────────────────────────────────────────────────────
+  e2e:
+    name: E2E Tests (QA)
+    runs-on: ubuntu-latest
+    needs: [test-unit, test-integration]
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: e2e/package-lock.json
+
+      - name: E2E — instalar dependencias
+        run: npm ci
+        working-directory: e2e
+
+      - name: E2E — instalar navegadores Playwright
+        run: npx playwright install --with-deps chromium
+        working-directory: e2e
+
+      - name: E2E — ejecutar tests contra QA
+        run: npm test
+        working-directory: e2e
+        env:
+          PLAYWRIGHT_BASE_URL: ${{ secrets.QA_FRONTEND_URL }}
+          E2E_EMAIL: ${{ secrets.E2E_EMAIL }}
+          E2E_PASSWORD: ${{ secrets.E2E_PASSWORD }}
+
+      - name: E2E — subir reporte en caso de fallo
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: e2e/playwright-report/
+          retention-days: 7
