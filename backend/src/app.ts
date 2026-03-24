@@ -48,6 +48,10 @@ app.use(
       if (/\.vercel\.app$/.test(origin)) {
         return callback(null, true);
       }
+      // Allow production domain and all its subdomains (www, etc.)
+      if (/^https:\/\/([\w-]+\.)?tallertrack\.com\.ar$/.test(origin)) {
+        return callback(null, true);
+      }
       if (allowedOrigins.includes(origin)) return callback(null, true);
       callback(new Error(`CORS: origin '${origin}' not allowed`));
     },
