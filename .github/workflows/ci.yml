@@ -1,6 +1,9 @@
 name: CI
 
 on:
+  push:
+    branches-ignore:
+      - master        # master solo recibe merges, no pushes directos
   pull_request:
     branches:
       - master
