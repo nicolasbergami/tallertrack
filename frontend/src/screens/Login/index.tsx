@@ -115,9 +115,14 @@ export function Login() {
 
         {/* Password */}
         <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
-            Contraseña
-          </label>
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
+              Contraseña
+            </label>
+            <Link to="/forgot-password" className="text-xs text-brand hover:text-brand-hover transition-colors">
+              ¿Olvidaste tu contraseña?
+            </Link>
+          </div>
           <div className="relative">
             <input
               type={showPass ? "text" : "password"}
