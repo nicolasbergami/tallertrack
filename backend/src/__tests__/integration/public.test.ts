@@ -15,10 +15,10 @@ describe("Endpoints públicos", () => {
       const res = await agent.get("/api/v1/billing/plans").expect(200);
       expect(Array.isArray(res.body)).toBe(true);
       expect(res.body.length).toBeGreaterThan(0);
-      // Cada plan tiene al menos slug y precio
+      // El endpoint devuelve { id (=slug), price (=price_ars) }
       const plan = res.body[0];
-      expect(plan).toHaveProperty("slug");
-      expect(plan).toHaveProperty("price_ars");
+      expect(plan).toHaveProperty("id");
+      expect(plan).toHaveProperty("price");
     });
   });
 

@@ -44,8 +44,9 @@ export async function setup(): Promise<void> {
     const passwordHash = await bcrypt.hash("TallerTrack2024!", 12);
 
     const { rows: [tenant] } = await client.query<{ id: string }>(
-      `INSERT INTO tenants (slug, name, country, plan, sub_status, onboarded, settings)
-       VALUES ('mi-taller', 'Mi Taller', 'AR', 'starter', 'trialing', true,
+      `INSERT INTO tenants (slug, name, country, plan, sub_status, trial_ends_at, onboarded, settings)
+       VALUES ('mi-taller', 'Mi Taller', 'AR', 'starter', 'trialing',
+               NOW() + INTERVAL '30 days', true,
                '{"timezone":"America/Argentina/Buenos_Aires","currency":"ARS","logo_url":null}')
        RETURNING id`
     );
