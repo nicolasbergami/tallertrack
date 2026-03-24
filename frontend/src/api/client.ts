@@ -6,12 +6,12 @@ import { useAuthStore } from "../store/auth.store";
 //    didn't reach the build (Vercel Preview env var injection issues).
 // 3. Default "": local dev uses the Vite proxy configured in vite.config.ts.
 function resolveApiBase(): string {
-  const configured = import.meta.env.VITE_API_URL as string | undefined;
-  if (configured) return configured;
   if (typeof window !== "undefined") {
     const h = window.location.hostname;
     if (h.includes("tallertrack-qa")) return "https://tallertrack-qa.up.railway.app";
   }
+  const configured = import.meta.env.VITE_API_URL as string | undefined;
+  if (configured) return configured;
   return "";
 }
 
