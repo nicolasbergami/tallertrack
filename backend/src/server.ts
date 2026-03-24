@@ -1,6 +1,7 @@
 import { env } from "./config/env";
 import { pool } from "./config/database";
 import { runMigrations } from "./config/migrate";
+import { runSeed } from "./scripts/seed.lib";
 import app from "./app";
 
 async function bootstrap() {
@@ -17,6 +18,16 @@ async function bootstrap() {
 
   // Run idempotent schema migrations (uses adminPool / BYPASSRLS)
   await runMigrations();
+
+  // Seed inicial — solo si SEED_ON_START=true (entornos QA / staging)
+  if (env.SEED_ON_START === "true") {
+    const ssl = env.DATABASE_URL.includes("railway")
+      ? { rejectUnauthorized: false }
+      : false;
+    await runSeed(env.DATABASE_URL, ssl).catch((err) =>
+      console.warn("⚠️  Seed falló (no es fatal):", (err as Error).message)
+    );
+  }
 
   const server = app.listen(env.PORT, () => {
     console.log(`🚀 TallerTrack API running on http://localhost:${env.PORT}`);

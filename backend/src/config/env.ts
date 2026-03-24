@@ -37,6 +37,10 @@ const envSchema = z.object({
   MP_ACCESS_TOKEN:   z.string().optional().default(""),
   MP_WEBHOOK_SECRET: z.string().optional().default(""),
 
+  // Seed on startup — si está en "true", ejecuta el seed al arrancar el servidor.
+  // Útil en entornos efímeros (QA, staging). NUNCA activar en producción.
+  SEED_ON_START: z.enum(["true", "false"]).optional(),
+
   // CORS — comma-separated list of allowed origins
   // e.g. "https://tallertrack.com.ar,https://tallertrack-app.vercel.app"
   CORS_ALLOWED_ORIGINS: z.string().default("http://localhost:5173"),
