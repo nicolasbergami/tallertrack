@@ -91,7 +91,7 @@ const BENTO: BentoFeature[] = [
     icon: "💳",
     title: "Sin permanencia",
     desc:
-      "14 días de prueba gratuita. Sin tarjeta de crédito. Cobros mensuales automáticos por Mercado Pago. Cancelá cuando quieras.",
+      "1 mes de prueba gratuita. Sin tarjeta de crédito. Cobros mensuales automáticos por Mercado Pago. Cancelá cuando quieras.",
     wide: true,
     cardClass: "border-slate-700/50 bg-slate-800/30",
     iconBg: "bg-slate-700/50",
@@ -237,7 +237,7 @@ export function Landing() {
             <div className="inline-flex items-center gap-2 bg-orange-500/10 border border-orange-500/20
                             text-orange-400 text-xs font-semibold px-3 py-1.5 rounded-full mb-6">
               <span className="w-1.5 h-1.5 rounded-full bg-orange-400 animate-pulse" />
-              14 días gratis · Sin tarjeta de crédito
+              1 mes gratis · Sin tarjeta de crédito
             </div>
           </FadeUp>
 
@@ -463,7 +463,7 @@ export function Landing() {
             <h2 className="text-[1.85rem] font-black mb-3 tracking-tight leading-tight">
               ¿Listo para ordenar tu taller?
             </h2>
-            <p className="text-slate-400 text-sm mb-7">Empezá hoy con 14 días gratis. Sin compromiso.</p>
+            <p className="text-slate-400 text-sm mb-7">Empezá hoy con 1 mes gratis. Sin compromiso.</p>
             <Link
               to="/register"
               className="inline-flex items-center justify-center h-14 px-8 w-full max-w-xs

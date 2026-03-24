@@ -102,7 +102,7 @@ export function Register() {
             </svg>
           </div>
           <h1 className="text-2xl font-bold text-white">Crear cuenta en TallerTrack</h1>
-          <p className="text-slate-400 mt-1 text-sm">14 días gratis · Sin tarjeta de crédito</p>
+          <p className="text-slate-400 mt-1 text-sm">1 mes gratis · Sin tarjeta de crédito</p>
         </div>
 
         <form onSubmit={handleSubmit} className="bg-slate-800 rounded-2xl p-6 space-y-4 border border-slate-700">
