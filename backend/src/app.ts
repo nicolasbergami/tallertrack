@@ -44,6 +44,10 @@ app.use(
       if (env.NODE_ENV !== "production" && /^https?:\/\/localhost(:\d+)?$/.test(origin)) {
         return callback(null, true);
       }
+      // Allow all Vercel preview URLs in non-production (branch/PR deployments)
+      if (env.NODE_ENV !== "production" && /\.vercel\.app$/.test(origin)) {
+        return callback(null, true);
+      }
       if (allowedOrigins.includes(origin)) return callback(null, true);
       callback(new Error(`CORS: origin '${origin}' not allowed`));
     },
