@@ -4,7 +4,7 @@ import { agent, getAuthToken } from "./helpers";
 const NEW_ORDER_BODY = {
   complaint: "El motor hace ruido al arrancar",
   vehicle_data: {
-    license_plate: `TEST-${Date.now()}`,
+    license_plate: `T${Date.now().toString().slice(-7)}`, // máx 10 chars
     brand: "Ford",
     model: "Focus",
     year: 2019,
@@ -30,7 +30,9 @@ describe("Work Orders endpoints", () => {
         .set("Authorization", `Bearer ${token}`)
         .expect(200);
 
-      expect(Array.isArray(res.body)).toBe(true);
+      // list retorna { data: WorkOrder[], total: number }
+      expect(Array.isArray(res.body.data)).toBe(true);
+      expect(typeof res.body.total).toBe("number");
     });
 
     it("retorna 401 sin token", async () => {
