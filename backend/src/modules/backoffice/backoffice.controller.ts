@@ -73,4 +73,15 @@ export const backofficeController = {
       next(err);
     }
   },
+
+  // POST /api/v1/backoffice/tenants/:id/impersonate
+  async impersonate(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { id } = req.params;
+      const result = await backofficeService.impersonate(id);
+      res.json(result);
+    } catch (err) {
+      next(err);
+    }
+  },
 };

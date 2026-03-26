@@ -1,10 +1,13 @@
+import jwt from "jsonwebtoken";
 import { withAdminContext } from "../../config/database";
+import { env } from "../../config/env";
 import { createHttpError } from "../../middleware/error.middleware";
 import type {
   BackofficeDashboard,
   BackofficeTenant,
   TenantListResponse,
   RecentActivity,
+  ImpersonateResponse,
 } from "./backoffice.types";
 
 
@@ -159,6 +162,68 @@ export const backofficeService = {
   },
 
   // ── Plan / status override ────────────────────────────────────────────────
+
+  // ── Impersonate a tenant (superadmin only) ───────────────────────────────
+
+  async impersonate(tenantId: string): Promise<ImpersonateResponse> {
+    return withAdminContext(async (client) => {
+      // 1. Validate tenant exists
+      const { rows: tenantRows } = await client.query<{
+        id: string; name: string; slug: string; plan: string; sub_status: string;
+      }>(
+        `SELECT id, name, slug, plan, sub_status
+           FROM tenants
+          WHERE id = $1 AND deleted_at IS NULL`,
+        [tenantId],
+      );
+      const tenant = tenantRows[0];
+      if (!tenant) throw createHttpError(404, "Tenant no encontrado.");
+
+      // 2. Find first active owner (fallback: any active user)
+      const { rows: userRows } = await client.query<{
+        id: string; email: string; full_name: string; role: string;
+      }>(
+        `SELECT id, email, full_name, role
+           FROM users
+          WHERE tenant_id = $1
+            AND deleted_at IS NULL
+            AND status = 'active'
+          ORDER BY
+            CASE role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END,
+            created_at ASC
+          LIMIT 1`,
+        [tenantId],
+      );
+      const user = userRows[0];
+      if (!user) throw createHttpError(404, "El taller no tiene usuarios activos.");
+
+      // 3. Sign a short-lived impersonation token (8 h, never superadmin)
+      const payload = {
+        sub:             user.id,
+        tenant_id:       tenant.id,
+        role:            user.role,
+        email:           user.email,
+        is_system_admin: false,
+      };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const token = jwt.sign(payload, env.JWT_SECRET, { expiresIn: "8h" as any });
+
+      return {
+        token,
+        user: {
+          id:           user.id,
+          full_name:    user.full_name,
+          email:        user.email,
+          role:         user.role,
+          tenant_id:    tenant.id,
+          tenant_name:  tenant.name,
+          tenant_slug:  tenant.slug,
+          plan:         tenant.plan,
+          sub_status:   tenant.sub_status,
+        },
+      };
+    });
+  },
 
   async updateTenantPlan(
     tenantId:             string,
