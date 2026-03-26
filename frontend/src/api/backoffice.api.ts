@@ -53,6 +53,21 @@ export interface TenantsFilter {
   status?: string;
 }
 
+export interface ImpersonateResponse {
+  token: string;
+  user: {
+    id:          string;
+    full_name:   string;
+    email:       string;
+    role:        string;
+    tenant_id:   string;
+    tenant_name: string;
+    tenant_slug: string;
+    plan:        string;
+    sub_status:  string;
+  };
+}
+
 // ---------------------------------------------------------------------------
 // API calls
 // ---------------------------------------------------------------------------
@@ -91,4 +106,7 @@ export const backofficeApi = {
       trial_ends_at,
       sub_current_period_end,
     }),
+
+  impersonate: (id: string) =>
+    api.post<ImpersonateResponse>(`/backoffice/tenants/${id}/impersonate`, {}),
 };

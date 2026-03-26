@@ -1,11 +1,13 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import {
   Search, SlidersHorizontal, Users, Wrench, Calendar,
   ChevronLeft, ChevronRight, Building2,
   CreditCard, LogIn, Ban, MoreHorizontal, CheckCircle2, ShieldOff,
 } from "lucide-react";
 import { backofficeApi, type BackofficeTenant } from "../../api/backoffice.api";
+import { useAuthStore } from "../../store/auth.store";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -555,6 +557,8 @@ export function TenantsTab() {
   const [status,  setStatus]  = useState("");
   const [page,    setPage]    = useState(1);
   const { toasts, show: showToast, dismiss } = useToast();
+  const navigate  = useNavigate();
+  const setAuth   = useAuthStore((s) => s.setAuth);
 
   // Modal state
   const [modalType,   setModalType]   = useState<ModalState>(null);
@@ -601,13 +605,28 @@ export function TenantsTab() {
     onError: () => showToast("Error al procesar la acción. Intentá de nuevo.", "error"),
   });
 
-  // ── Impersonate (stub — future endpoint) ──────────────────────────────────
-  function handleImpersonate(tenant: BackofficeTenant) {
-    showToast(`Iniciando sesión como "${tenant.name}"…`, "info", 4000);
-    // TODO: call POST /api/v1/backoffice/impersonate/:tenantId
-    // const { token } = await backofficeApi.impersonate(tenant.id);
-    // setAuth(token, ...); navigate("/dashboard");
-    console.log("[Impersonate] tenant_id:", tenant.id);
+  // ── Impersonate ───────────────────────────────────────────────────────────
+  async function handleImpersonate(tenant: BackofficeTenant) {
+    showToast(`Iniciando sesión como "${tenant.name}"…`, "info", 3000);
+    try {
+      const { token, user } = await backofficeApi.impersonate(tenant.id);
+      setAuth(token, {
+        id:              user.id,
+        name:            user.full_name,
+        email:           user.email,
+        role:            user.role as never,
+        tenantId:        user.tenant_id,
+        tenantName:      user.tenant_name,
+        tenantSlug:      user.tenant_slug,
+        plan:            user.plan as never,
+        sub_status:      user.sub_status,
+        is_system_admin: false,
+      });
+      navigate("/dashboard");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Error al ingresar como taller.";
+      showToast(msg, "error");
+    }
   }
 
   function openModal(type: ModalState, tenant: BackofficeTenant) {

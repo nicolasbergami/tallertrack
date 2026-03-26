@@ -43,6 +43,21 @@ export interface RecentActivity {
   created_at: string;
 }
 
+export interface ImpersonateResponse {
+  token: string;
+  user: {
+    id:          string;
+    full_name:   string;
+    email:       string;
+    role:        string;
+    tenant_id:   string;
+    tenant_name: string;
+    tenant_slug: string;
+    plan:        string;
+    sub_status:  string;
+  };
+}
+
 export interface PlanUpdateDTO {
   plan:                   string;
   sub_status:             string;

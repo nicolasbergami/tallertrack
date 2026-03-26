@@ -11,7 +11,8 @@ router.use(authenticate, requireSuperAdmin);
 router.get("/dashboard",          backofficeController.getDashboard);
 router.get("/tenants",            backofficeController.getTenants);
 router.get("/activity",           backofficeController.getActivity);
-router.patch("/tenants/:id/plan", backofficeController.updateTenantPlan);
-router.patch("/plans/:slug",      backofficeController.updatePlanPrice);
+router.patch("/tenants/:id/plan",        backofficeController.updateTenantPlan);
+router.patch("/plans/:slug",             backofficeController.updatePlanPrice);
+router.post("/tenants/:id/impersonate",  backofficeController.impersonate);
 
 export default router;
