@@ -20,6 +20,7 @@ import { ResetPassword }  from "./screens/ResetPassword";
 import { ProtectedRoute }   from "./components/ProtectedRoute";
 import { SuperAdminRoute }  from "./components/SuperAdminRoute";
 import { Backoffice }       from "./screens/Backoffice";
+import { InstallPrompt }    from "./components/InstallPrompt";
 import { useAuthStore }     from "./store/auth.store";
 
 const queryClient = new QueryClient({
@@ -91,6 +92,7 @@ export default function App() {
     <ErrorBoundary>
       {!splashDone && <SplashScreen onDone={handleSplashDone} />}
       <QueryClientProvider client={queryClient}>
+        <InstallPrompt />
         <BrowserRouter>
           <Routes>
             {/* Landing / home */}
