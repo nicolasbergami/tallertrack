@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import { Helmet } from "react-helmet-async";
 import { motion, AnimatePresence } from "framer-motion";
 
 // ---------------------------------------------------------------------------
@@ -202,6 +203,41 @@ export function Landing() {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
 
   return (
+    <>
+    <Helmet>
+      <html lang="es-AR" />
+      <title>TallerTrack – Software para Talleres Mecánicos en Argentina</title>
+      <meta name="description" content="Eliminá los llamados de clientes preguntando por su auto. TallerTrack avisa por WhatsApp automático cuando cambia el estado del vehículo. Probalo 1 mes gratis." />
+      <meta name="robots" content="index, follow" />
+      <link rel="canonical" href="https://tallertrack.com.ar/" />
+      <meta property="og:type" content="website" />
+      <meta property="og:url" content="https://tallertrack.com.ar/" />
+      <meta property="og:title" content="TallerTrack – Menos llamados. Más reparaciones." />
+      <meta property="og:description" content="El sistema que avisa a tus clientes por WhatsApp cada vez que su auto cambia de estado. Sin app. Sin llamados. Para talleres mecánicos de Argentina." />
+      <meta property="og:image" content="https://tallertrack.com.ar/og-image.jpg" />
+      <meta property="og:locale" content="es_AR" />
+      <meta property="og:site_name" content="TallerTrack" />
+      <meta name="twitter:card" content="summary_large_image" />
+      <meta name="twitter:title" content="TallerTrack – Software para Talleres Mecánicos" />
+      <meta name="twitter:description" content="Automatizá la comunicación con tus clientes vía WhatsApp. Sin interrupciones. Probalo 1 mes gratis." />
+      <meta name="twitter:image" content="https://tallertrack.com.ar/og-image.jpg" />
+      <script type="application/ld+json">{JSON.stringify({
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "TallerTrack",
+        "url": "https://tallertrack.com.ar",
+        "applicationCategory": "BusinessApplication",
+        "operatingSystem": "Web",
+        "description": "Plataforma SaaS para talleres mecánicos de Argentina que automatiza la comunicación con clientes vía WhatsApp.",
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "ARS",
+          "description": "1 mes de prueba gratuita, sin tarjeta de crédito"
+        },
+        "areaServed": { "@type": "Country", "name": "Argentina" }
+      })}</script>
+    </Helmet>
     <div className="min-h-screen bg-[#0F172A] text-white flex flex-col">
 
       {/* ── Navbar ── */}
@@ -231,7 +267,7 @@ export function Landing() {
       <main className="flex-1">
 
         {/* ── Hero ── */}
-        <section className="px-5 pt-16 pb-10 text-center max-w-xl mx-auto">
+        <section id="inicio" aria-labelledby="hero-heading" className="px-5 pt-16 pb-10 text-center max-w-xl mx-auto">
 
           <FadeUp>
             <div className="inline-flex items-center gap-2 bg-orange-500/10 border border-orange-500/20
@@ -242,7 +278,7 @@ export function Landing() {
           </FadeUp>
 
           <FadeUp delay={0.06}>
-            <h1 className="text-[3rem] sm:text-[3.5rem] font-black leading-[1.1] tracking-tight mb-5">
+            <h1 id="hero-heading" className="text-[3rem] sm:text-[3.5rem] font-black leading-[1.1] tracking-tight mb-5">
               El sistema de gestión para{" "}
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-400 via-amber-300 to-orange-400">
                 talleres mecánicos
@@ -346,11 +382,11 @@ export function Landing() {
         </FadeUp>
 
         {/* ── Bento Features ── */}
-        <section className="px-5 max-w-2xl mx-auto mb-16 mt-6">
+        <section id="funciones" aria-labelledby="funciones-heading" className="px-5 max-w-2xl mx-auto mb-16 mt-6">
           <FadeUp>
-            <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-widest text-center mb-8">
+            <h2 id="funciones-heading" className="text-[11px] font-semibold text-slate-500 uppercase tracking-widest text-center mb-8">
               Todo lo que necesitás
-            </p>
+            </h2>
           </FadeUp>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -384,13 +420,13 @@ export function Landing() {
         </section>
 
         {/* ── Pricing ── */}
-        <section className="px-5 max-w-lg mx-auto mb-16">
+        <section id="planes" aria-labelledby="planes-heading" className="px-5 max-w-lg mx-auto mb-16">
           <FadeUp>
             <div className="rounded-3xl border border-white/[0.06] bg-slate-800/25 p-6">
 
-              <p className="text-[11px] font-semibold text-orange-400 uppercase tracking-widest text-center mb-6">
+              <h2 id="planes-heading" className="text-[11px] font-semibold text-orange-400 uppercase tracking-widest text-center mb-6">
                 Precios en ARS · Pagos por Mercado Pago
-              </p>
+              </h2>
 
               <div className="grid grid-cols-3 gap-3 items-end">
                 {PRICING.map((p) => (
@@ -439,11 +475,11 @@ export function Landing() {
         </section>
 
         {/* ── FAQ ── */}
-        <section className="px-5 max-w-lg mx-auto mb-16">
+        <section id="faq" aria-labelledby="faq-heading" className="px-5 max-w-lg mx-auto mb-16">
           <FadeUp>
-            <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-widest text-center mb-6">
+            <h2 id="faq-heading" className="text-[11px] font-semibold text-slate-500 uppercase tracking-widest text-center mb-6">
               Preguntas frecuentes
-            </p>
+            </h2>
             <div className="flex flex-col gap-2">
               {FAQ.map((item, i) => (
                 <FAQAccordionItem
@@ -486,5 +522,6 @@ export function Landing() {
         </p>
       </footer>
     </div>
+    </>
   );
 }
