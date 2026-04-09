@@ -115,7 +115,9 @@ export const sessionManager = {
   },
 
   // ── Internal: create and wire a WASocket ──────────────────────────────────
-  async _connect(tenantId: string, qrEmitter: EventEmitter): Promise<void> {
+  async _connect(tenantId: string, qrEmitter: EventEmitter, retryCount = 0): Promise<void> {
+    const MAX_RETRIES = 10;
+
     // Prevent unhandled 'error' event crash when nobody is listening (e.g. during restore)
     if (qrEmitter.listenerCount("error") === 0) {
       qrEmitter.on("error", (err: Error) =>
@@ -168,16 +170,28 @@ export const sessionManager = {
     const session: ManagedSession = { socket, qrEmitter, status: "connecting" };
     sessions.set(tenantId, session);
 
-    let qrEverEmitted = false;
+    let qrEverEmitted   = false;
+    let wasEverConnected = false;
 
-    // Safety timeout: if WA server never responds within 30s after socket creation
+    // Safety timeout: if WA server never responds within 30s after socket creation.
+    // On retries (saved-creds path) we always retry rather than give up.
     const noResponseTimeout = setTimeout(() => {
-      if (!qrEverEmitted && session.status !== "connected") {
-        console.warn(`[WhatsApp] No response from WA server for tenant ${tenantId} after 30s`);
+      if (!qrEverEmitted && !wasEverConnected && session.status !== "connected") {
+        console.warn(`[WhatsApp] No response from WA server for tenant ${tenantId} after 30s (retry ${retryCount})`);
         session.status = "disconnected";
         sessions.delete(tenantId);
         try { socket.end(undefined); } catch { /* ignore */ }
-        qrEmitter.emit("error", new Error("WhatsApp no respondió en 30 segundos. El servidor puede no tener acceso a internet."));
+        if (retryCount < MAX_RETRIES) {
+          const delay = Math.min(10_000 * Math.pow(2, retryCount), 120_000);
+          console.log(`[WhatsApp] Tenant ${tenantId} — scheduling retry ${retryCount + 1}/${MAX_RETRIES} in ${delay}ms`);
+          setTimeout(() => {
+            this._connect(tenantId, qrEmitter, retryCount + 1).catch((err) =>
+              console.error(`[WhatsApp] Retry error for tenant ${tenantId}:`, err)
+            );
+          }, delay);
+        } else {
+          qrEmitter.emit("error", new Error("WhatsApp no respondió en 30 segundos. El servidor puede no tener acceso a internet."));
+        }
       }
     }, 30_000);
 
@@ -200,7 +214,8 @@ export const sessionManager = {
 
       if (connection === "open") {
         clearTimeout(noResponseTimeout);
-        session.status = "connected";
+        session.status   = "connected";
+        wasEverConnected = true;
         // Baileys format: "5491123456789:0@s.whatsapp.net" → take everything before ":"
         session.phone  = socket.user?.id?.split(":")[0] ?? undefined;
 
@@ -280,14 +295,24 @@ export const sessionManager = {
         sessions.delete(tenantId);
 
         if (!loggedOut) {
-          if (!qrEverEmitted) {
+          // Retry if: the session was previously active (qrEverEmitted or wasEverConnected),
+          // OR this is already a retry attempt (retryCount > 0, e.g. restore on startup).
+          // Only give up on a fresh first attempt that never got past the initial phase.
+          const shouldRetry = wasEverConnected || qrEverEmitted || retryCount > 0;
+
+          if (!shouldRetry) {
             console.warn(`[WhatsApp] Tenant ${tenantId} closed before QR (code ${statusCode})`);
             qrEmitter.emit("error", new Error(`WhatsApp rechazó la conexión (código ${statusCode ?? "desconocido"}). Reintentá en unos segundos.`));
+          } else if (retryCount >= MAX_RETRIES) {
+            console.error(`[WhatsApp] Tenant ${tenantId} — max retries (${MAX_RETRIES}) reached, giving up.`);
+            qrEmitter.emit("error", new Error("WhatsApp no pudo reconectarse después de varios intentos. Reconectá manualmente desde la app."));
           } else {
-            console.log(`[WhatsApp] Tenant ${tenantId} disconnected (code ${statusCode}), reconnecting…`);
-            await new Promise((r) => setTimeout(r, 5_000));
+            // Exponential backoff: 5s, 10s, 20s … capped at 60s
+            const delay = Math.min(5_000 * Math.pow(2, retryCount), 60_000);
+            console.log(`[WhatsApp] Tenant ${tenantId} disconnected (code ${statusCode}), reconnecting in ${delay}ms (retry ${retryCount + 1}/${MAX_RETRIES})…`);
+            await new Promise((r) => setTimeout(r, delay));
             const newEmitter = new EventEmitter();
-            this._connect(tenantId, newEmitter).catch((err) =>
+            this._connect(tenantId, newEmitter, retryCount + 1).catch((err) =>
               console.error(`[WhatsApp] Reconnect error for tenant ${tenantId}:`, err)
             );
           }
